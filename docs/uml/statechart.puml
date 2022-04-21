@@ -1,0 +1,15 @@
+@startuml Statechart
+
+[*] --> Initialization
+Initialization --> Failure: Error
+Initialization -right-> Idle: Success
+Idle --> Failure: Error
+Idle -right-> Preparation: Input Received
+Preparation --> Failure: Error
+Preparation -right-> Operation: Input Confirmed
+Operation --> Failure: Error
+Operation -left-> Idle: \nCutting Complete
+
+Failure --> [*]: Error Displayed
+
+@enduml
