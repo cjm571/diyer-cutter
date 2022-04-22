@@ -1,4 +1,4 @@
-@startuml Statechart
+@startuml statechart_top
 
 [*] --> Initialization
 Initialization --> Failure: Error

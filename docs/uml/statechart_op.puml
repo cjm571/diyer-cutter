@@ -1,0 +1,44 @@
+@startuml statechart_op
+
+state Operation {
+
+    state "Safety Checks" as SafetyChecks {
+        state "Wire Feed" as WireFeed
+        state "Cutter Guard" as CutterGuard
+        state "Wire Receptacle" as WireReceptacle
+        state "Retry/Override Prompt" as RetryOverride
+
+        [*] -> WireFeed: Passed
+        WireFeed -> CutterGuard: Passed
+        CutterGuard -> WireReceptacle: Passed
+        WireReceptacle -> [*]: Passed
+
+        WireFeed -up-> RetryOverride: Failed
+        CutterGuard -up-> RetryOverride: Failed
+        WireReceptacle -up-> RetryOverride: Failed
+        RetryOverride -> WireFeed: Retry
+        RetryOverride -> CutterGuard: Retry
+        RetryOverride -> WireReceptacle: Retry
+        RetryOverride -> [*]: Override
+    }
+
+    state Cutting {
+        state "Feed Wire X Steps" as FeedWire
+        state "Engage/Disengage Cutter" as CycleCutter
+        state "Increment Cut Counter" as IncrCounter
+        state CheckCount <<choice>>
+
+        [*] -> FeedWire
+        FeedWire -> CycleCutter
+        CycleCutter -> IncrCounter
+        IncrCounter -> CheckCount
+        CheckCount -> FeedWire: \n[Count < UserSpec]
+        CheckCount -> [*]: [Count >= UserSpec]
+    }
+
+    [*] -> SafetyChecks
+    SafetyChecks -down-> Cutting
+    Cutting -> [*]
+}
+
+@enduml

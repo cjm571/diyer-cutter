@@ -1,0 +1,15 @@
+@startuml statechart_prep
+
+state Preparation {
+    state "Prompt for Cut Length" as LengthPrompt
+    state "Prompt for Number of Cuts" as NumPrompt
+    state "Final Confirmation" as FinalPrompt
+
+    [*] -> LengthPrompt
+    LengthPrompt -> NumPrompt
+    NumPrompt -> FinalPrompt
+    FinalPrompt -> [*]: Confirmed
+    FinalPrompt -> LengthPrompt: \nRejected
+}
+
+@enduml

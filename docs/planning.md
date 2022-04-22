@@ -31,7 +31,7 @@ The motor(s) must be driven to user specification.
 
 # Design
 ## Statechart
-![Statechart](./uml/Statechart.png)
+![Statechart](./uml/statechart_top.png)
 
 ## Initialization
 Upon power-up, the micro:bit will take the following sequence of actions:
@@ -45,6 +45,7 @@ Upon power-up, the micro:bit will take the following sequence of actions:
 A largely quiescent state where the micro:bit will sit idle until the user begins providing input via the keypad.
 
 ## Preparation
+![Statechart](./uml/statechart_prep.png)
 This is the input-collection state. A series of prompts will be presented to the user on the LCD to determine the parameters of the cuts that should be made. The user will respond to the prompt and press "`#`" to confirm the response; "`*`" can be used as a backspace button. The prompts will be:
 
 1. Cut length
@@ -62,6 +63,27 @@ NUMBER OF CUTS:
 3. Final confirmation
 ```
 0123456789012345
-##in x ####
-OK? _
+XXin x YYYY
+OK? (#=Y, *=N) _
 ```
+
+If the user chooses "`*`" for "No" at the final prompt, the micro:bit will return to the first prompt. If the inputs are confirmed, the micro:bit will progress to the Operation stage.
+
+## Operation
+![Statechart](./uml/statechart_op.png)
+This is the cutting stage. Before cutting can begin, safety sensors are checked to ensure that the system is ready for safe operation. If any safety sensors are not in the right state, the micro:bit will prompt the user to check the associated safety device. The user may enter an override code to bypass the sensors in the event of an undetected error preventing the sensor from reporting correctly.
+
+Safety checks include:
+
+* Wire is properly fed
+* Cutter guard is in place
+* Cut wire receptacle is in place
+
+Once safety checks have passed (or been overridden) the micro:bit will perform the following sequence of actions
+
+1. Command feed stepper motor to advance the appropriate number of steps to reach the user-specified cut length.
+2. Command cutter servo motor to engage the cutting head for one cycle
+3. Increment cut counter
+4. Repeat steps 1-3 until user-specified cut count is reached
+
+Upon successful completion of all cuts, the micro:bit will return the system to the Idle state, where the user may begin the process again with more wire.
