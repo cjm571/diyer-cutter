@@ -79,6 +79,17 @@ fn main() -> ! {
     timer.delay_ms(500_u32);
     output_pins_to_lcd.print_state();
 
+    // Clear the display before writing anything
+    output_pins_to_lcd.clear_display();
+    rprintln!("Clearing display...");
+    output_pins_to_lcd.print_state();    
+
+    // Give LCD time to process and pull E back down TODO: Check BF
+    timer.delay_ms(500_u32);
+    output_pins_to_lcd.reset_pins();
+    timer.delay_ms(500_u32);
+    output_pins_to_lcd.print_state();
+
     // Write 'H'
     output_pins_to_lcd.write_H();
     rprintln!("Writing 'H'...");
@@ -142,6 +153,8 @@ impl OutputPinsToLcd {
     }
 
     pub fn reset_pins(&mut self) {
+        self.en.set_low().unwrap();
+
         self.d0.set_low().unwrap();
         self.d1.set_low().unwrap();
         self.d2.set_low().unwrap();
@@ -152,7 +165,14 @@ impl OutputPinsToLcd {
         self.d7.set_low().unwrap();
         self.rs.set_low().unwrap();
         self.rw.set_low().unwrap();
-        self.en.set_low().unwrap();
+    }
+
+    pub fn clear_display(&mut self) {
+        self.reset_pins();
+
+        self.d0.set_high().unwrap();
+
+        self.en.set_high().unwrap();
     }
 
     pub fn set_8bit_2line_mode(&mut self) {
