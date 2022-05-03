@@ -11,24 +11,24 @@ use microbit::{
         prelude::*,
         Timer,
     },
+    pac::TIMER0,
 };
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
 struct OutputPinsToLcd {
-    d0: p0::P0_02<Output<PushPull>>,  // P0
-    d1: p0::P0_03<Output<PushPull>>,  // P1
-    d2: p0::P0_04<Output<PushPull>>,  // P2
-    d3: p0::P0_31<Output<PushPull>>,  // P3
-    d4: p0::P0_28<Output<PushPull>>,  // P4
-    d5: p0::P0_17<Output<PushPull>>,  // P13
-    d6: p1::P1_05<Output<PushPull>>,  // P6
-    d7: p0::P0_11<Output<PushPull>>,  // P7
-    rs: p0::P0_09<Output<PushPull>>,  // P9
-    rw: p0::P0_30<Output<PushPull>>,  // P10
-    en: p0::P0_01<Output<PushPull>>,  // P14
+    d0: p0::P0_02<Output<PushPull>>, // P0
+    d1: p0::P0_03<Output<PushPull>>, // P1
+    d2: p0::P0_04<Output<PushPull>>, // P2
+    d3: p0::P0_31<Output<PushPull>>, // P3
+    d4: p0::P0_28<Output<PushPull>>, // P4
+    d5: p0::P0_17<Output<PushPull>>, // P13
+    d6: p1::P1_05<Output<PushPull>>, // P6
+    d7: p0::P0_11<Output<PushPull>>, // P7
+    rs: p0::P0_09<Output<PushPull>>, // P9
+    rw: p0::P0_30<Output<PushPull>>, // P10
+    en: p0::P0_01<Output<PushPull>>, // P14
 }
-
 
 #[entry]
 fn main() -> ! {
@@ -47,80 +47,24 @@ fn main() -> ! {
     timer.delay_ms(1000_u32);
 
     // Set up LCD for 8-bit, 2-line mode
-    output_pins_to_lcd.set_8bit_2line_mode();
+    output_pins_to_lcd.set_8bit_2line_mode(&mut timer);
     rprintln!("Setting LCD up for 8bit, 2line mode...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
 
     // Set up LCD cursor
-    output_pins_to_lcd.set_cursor();
+    output_pins_to_lcd.set_cursor(&mut timer);
     rprintln!("Setting LCD cursor up...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
 
     // Set up auto-increment
-    output_pins_to_lcd.set_autoincrement();
+    output_pins_to_lcd.set_autoincrement(&mut timer);
     rprintln!("Setting up auto-increment...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
 
     // Clear the display before writing anything
-    output_pins_to_lcd.clear_display();
+    output_pins_to_lcd.clear_display(&mut timer);
     rprintln!("Clearing display...");
-    output_pins_to_lcd.print_state();    
 
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
-
-    // Write 'H'
-    output_pins_to_lcd.write_H();
-    rprintln!("Writing 'H'...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
-
-    // Write 'I'
-    output_pins_to_lcd.write_I();
-    rprintln!("Writing 'I'...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-
-    // Write 'I'
-    output_pins_to_lcd.write_I();
-    rprintln!("Writing 'I'...");
-    output_pins_to_lcd.print_state();
-
-    // Give LCD time to process and pull E back down TODO: Check BF
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.reset_pins();
-    timer.delay_ms(500_u32);
-    output_pins_to_lcd.print_state();
+    // Write "HI BABE!"
+    output_pins_to_lcd.write_string("HIII BABE! <3", &mut timer);
+    rprintln!("Writing greeting...");
 
     rprintln!("Entering main loop");
     loop {
@@ -138,23 +82,36 @@ fn main() -> ! {
 impl OutputPinsToLcd {
     pub fn new(pins: Pins, display_pins: DisplayPins) -> Self {
         Self {
-            d0: pins.p0_02.into_push_pull_output(Level::Low),        // P0
-            d1: pins.p0_03.into_push_pull_output(Level::Low),        // P1
-            d2: pins.p0_04.into_push_pull_output(Level::Low),        // P2
-            d3: display_pins.col3.into_push_pull_output(Level::Low), // P3 TODO: use a lower-level pin struct so we don't have the split-brain pins/display pins thing
+            d0: pins.p0_02.into_push_pull_output(Level::Low), // P0
+            d1: pins.p0_03.into_push_pull_output(Level::Low), // P1
+            d2: pins.p0_04.into_push_pull_output(Level::Low), // P2
+            d3: display_pins.col3.into_push_pull_output(Level::Low), // P3
             d4: display_pins.col1.into_push_pull_output(Level::Low), // P4
-            d5: pins.p0_17.into_push_pull_output(Level::Low),        // P13
+            d5: pins.p0_17.into_push_pull_output(Level::Low), // P13
             d6: display_pins.col4.into_push_pull_output(Level::Low), // P6
             d7: display_pins.col2.into_push_pull_output(Level::Low), // P7
-            rs: pins.p0_09.into_push_pull_output(Level::Low),        // P9
+            rs: pins.p0_09.into_push_pull_output(Level::Low), // P9
             rw: display_pins.col5.into_push_pull_output(Level::Low), // P10
-            en: pins.p0_01.into_push_pull_output(Level::Low),        // P14
+            en: pins.p0_01.into_push_pull_output(Level::Low), // P14
         }
     }
 
-    pub fn reset_pins(&mut self) {
+    fn pulse_enable(&mut self, timer: &mut Timer<TIMER0>) {
+        // Delay before setting Enable high to ensure that Address Settling time (60ns) is not violated
+        timer.delay_us(1000_u32);
+        self.en.set_high().unwrap();
+
+        // Enable must be held high for at least 500ns (at 3.3V operation) per HD44780U datasheet
+        // Shortest we can hold is 1us, so we'll do that
+        timer.delay_us(1000_u32);
+
         self.en.set_low().unwrap();
 
+        // Delay another 1us to ensure Enable Cycle Time minimum (1000ns) is not violated
+        timer.delay_us(1000_u32);
+    }
+
+    pub fn reset_pins(&mut self) {
         self.d0.set_low().unwrap();
         self.d1.set_low().unwrap();
         self.d2.set_low().unwrap();
@@ -167,62 +124,83 @@ impl OutputPinsToLcd {
         self.rw.set_low().unwrap();
     }
 
-    pub fn clear_display(&mut self) {
+    pub fn clear_display(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
         self.d0.set_high().unwrap();
 
-        self.en.set_high().unwrap();
+        self.pulse_enable(timer);
     }
 
-    pub fn set_8bit_2line_mode(&mut self) {
+    pub fn set_8bit_2line_mode(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
         self.d5.set_high().unwrap();
         self.d4.set_high().unwrap();
         self.d3.set_high().unwrap();
 
-        self.en.set_high().unwrap();
+        self.pulse_enable(timer);
     }
 
-    pub fn set_cursor(&mut self) {
+    pub fn set_cursor(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
         self.d3.set_high().unwrap();
         self.d2.set_high().unwrap();
         self.d1.set_high().unwrap();
 
-        self.en.set_high().unwrap();
+        self.pulse_enable(timer);
     }
 
-    pub fn set_autoincrement(&mut self) {
+    pub fn set_autoincrement(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
         self.d2.set_high().unwrap();
         self.d1.set_high().unwrap();
 
-        self.en.set_high().unwrap();
+        self.pulse_enable(timer);
     }
 
-    pub fn write_H(&mut self) {
-        self.reset_pins();
-
-        self.rs.set_high().unwrap();
-        self.d6.set_high().unwrap();
-        self.d3.set_high().unwrap();
-
-        self.en.set_high().unwrap();
+    pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
+        for c in out_str.chars() {
+            self.write_char(c, timer);
+        }
     }
 
-    pub fn write_I(&mut self) {
+    fn write_char(&mut self, c: char, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
-
         self.rs.set_high().unwrap();
-        self.d6.set_high().unwrap();
-        self.d3.set_high().unwrap();
-        self.d0.set_high().unwrap();
 
-        self.en.set_high().unwrap();
+        // Get the ASCII index of the character
+        let ascii_idx = c as u32;
+
+        // Check each bit's value and set in the corresponding data bit pin
+        if ascii_idx & (1 << 0) != 0 {
+            self.d0.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 1) != 0 {
+            self.d1.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 2) != 0 {
+            self.d2.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 3) != 0 {
+            self.d3.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 4) != 0 {
+            self.d4.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 5) != 0 {
+            self.d5.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 6) != 0 {
+            self.d6.set_high().unwrap();
+        }
+        if ascii_idx & (1 << 7) != 0 {
+            self.d7.set_high().unwrap();
+        }
+
+        self.pulse_enable(timer);
     }
 
     pub fn print_state(&self) {
