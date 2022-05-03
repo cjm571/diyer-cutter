@@ -16,6 +16,10 @@ use microbit::{
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
+
+const LCD_MAX_LINE_LENGTH: usize = 16;
+const LCD_MAX_NEWLINES: usize = 1;
+
 struct OutputPinsToLcd {
     d0: p0::P0_02<Output<PushPull>>, // P0
     d1: p0::P0_03<Output<PushPull>>, // P1
@@ -44,7 +48,7 @@ fn main() -> ! {
 
     // Wait a little bit before entering main loop
     rprintln!("Giving LCD time to initialize...");
-    timer.delay_ms(1000_u32);
+    timer.delay_ms(15_u32);
 
     // Set up LCD for 8-bit, 2-line mode
     output_pins_to_lcd.set_8bit_2line_mode(&mut timer);
@@ -63,7 +67,7 @@ fn main() -> ! {
     rprintln!("Clearing display...");
 
     // Write "HI BABE!"
-    output_pins_to_lcd.write_string("HIII BABE! <3", &mut timer);
+    output_pins_to_lcd.write_string("  HIII BABE! <3\nYou reeeaal cute", &mut timer);
     rprintln!("Writing greeting...");
 
     rprintln!("Entering main loop");
@@ -162,8 +166,26 @@ impl OutputPinsToLcd {
     }
 
     pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
+        // Sanity-check input        
+        let lines = out_str.split("\n");
+        for (i, line) in lines.enumerate() {
+            if line.len() > LCD_MAX_LINE_LENGTH {
+                panic!("Line '{}' exceeds LCD Max Length ({})", line, LCD_MAX_LINE_LENGTH);
+            }
+
+            if i > LCD_MAX_NEWLINES {
+                panic!("Too many newlines for LCD");
+            }
+        }
+
         for c in out_str.chars() {
-            self.write_char(c, timer);
+            // Move the cursor on newline, otherwise write out the character
+            if c == '\n' {
+                self.newline(timer);
+            }
+            else {
+                self.write_char(c, timer);
+            }
         }
     }
 
@@ -199,6 +221,15 @@ impl OutputPinsToLcd {
         if ascii_idx & (1 << 7) != 0 {
             self.d7.set_high().unwrap();
         }
+
+        self.pulse_enable(timer);
+    }
+
+    fn newline(&mut self, timer: &mut Timer<TIMER0>) {
+        self.reset_pins();
+
+        self.d7.set_high().unwrap();
+        self.d6.set_high().unwrap();
 
         self.pulse_enable(timer);
     }
