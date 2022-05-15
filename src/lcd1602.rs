@@ -29,6 +29,7 @@ use rtt_target::rprintln;
 
 const LCD_MAX_LINE_LENGTH: usize = 16;
 const LCD_MAX_NEWLINES: usize = 1;
+const ASCII_INT_OFFSET: usize = 48;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -90,6 +91,37 @@ impl Lcd1602 {
             .write_string("HI BABE! <3\nYou so pretty...", timer);
         rprintln!("Writing greeting...");
     }
+
+    //OPT: Implement an "overwrite" option for writing
+    pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
+        self.input_pins.write_string(out_str, timer);
+    }
+
+    pub fn write_u8(&mut self, val: u8, timer: &mut Timer<TIMER0>) {
+        // Convert value to its zero-padded ASCII values
+        let ones = val % 10;
+        let tens = ((val - ones) % 100) / 10;
+        let hundreds = (val - tens - ones) / 100;
+
+        let ascii_vals = [
+            hundreds + ASCII_INT_OFFSET as u8,
+            tens + ASCII_INT_OFFSET as u8,
+            ones + ASCII_INT_OFFSET as u8,
+            ];
+        
+        // Encode ASCII values as &strs
+        let mut tmp = [0; 3];
+        for i in 0..3 {
+            // Write the stringified value to the display
+            let out_str = (ascii_vals[i] as char).encode_utf8(&mut tmp);
+            self.input_pins.write_string(out_str, timer);
+        }
+    }
+
+    //TODO: Fix this weird straddled architecture
+    pub fn backspace(&mut self, count: usize, timer: &mut Timer<TIMER0>) {
+        self.input_pins.backspace(count, timer);
+    }
 }
 
 impl LcdInputPins {
@@ -100,6 +132,45 @@ impl LcdInputPins {
         en: Pin<Output<PushPull>>,
     ) -> Self {
         Self { d, rs, rw, en }
+    }
+
+    pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
+        // Sanity-check input
+        let lines = out_str.split('\n');
+        for (i, line) in lines.enumerate() {
+            if line.len() > LCD_MAX_LINE_LENGTH {
+                panic!(
+                    "Line '{}' exceeds LCD Max Length ({})",
+                    line, LCD_MAX_LINE_LENGTH
+                );
+            }
+
+            if i > LCD_MAX_NEWLINES {
+                panic!("Too many newlines for LCD");
+            }
+        }
+
+        for c in out_str.chars() {
+            // Move the cursor on newline, otherwise write out the character
+            if c == '\n' {
+                self.newline(timer);
+            } else {
+                self.write_char(c, timer);
+            }
+        }
+    }
+
+    pub fn backspace(&mut self, count: usize, timer: &mut Timer<TIMER0>) {
+        for _i in 0..count {
+            // Shift cursor backwards
+            self.shift_cursor(Direction::Left, timer);
+
+            // Write a blank character code
+            self.write_char(32 as char, timer);
+
+            // Shift cursor backwards again in prep for next char entry
+            self.shift_cursor(Direction::Left, timer);
+        }
     }
 
     fn pulse_enable(&mut self, timer: &mut Timer<TIMER0>) {
@@ -160,43 +231,6 @@ impl LcdInputPins {
         self.d[1].set_high().unwrap();
 
         self.pulse_enable(timer);
-    }
-
-    pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
-        // Sanity-check input
-        let lines = out_str.split('\n');
-        for (i, line) in lines.enumerate() {
-            if line.len() > LCD_MAX_LINE_LENGTH {
-                panic!(
-                    "Line '{}' exceeds LCD Max Length ({})",
-                    line, LCD_MAX_LINE_LENGTH
-                );
-            }
-
-            if i > LCD_MAX_NEWLINES {
-                panic!("Too many newlines for LCD");
-            }
-        }
-
-        for c in out_str.chars() {
-            // Move the cursor on newline, otherwise write out the character
-            if c == '\n' {
-                self.newline(timer);
-            } else {
-                self.write_char(c, timer);
-            }
-        }
-    }
-
-    pub fn backspace(&mut self, timer: &mut Timer<TIMER0>) {
-        // Shift cursor backwards
-        self.shift_cursor(Direction::Left, timer);
-
-        // Write a blank character code
-        self.write_char(32 as char, timer);
-
-        // Shift cursor backwards again in prep for next char entry
-        self.shift_cursor(Direction::Left, timer);
     }
 
     fn write_char(&mut self, c: char, timer: &mut Timer<TIMER0>) {

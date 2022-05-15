@@ -30,7 +30,7 @@ use microbit::{
         pwm::Pwm,
         Timer,
     },
-    pac::TIMER1,
+    pac::{TIMER0, TIMER1},
 };
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
@@ -41,7 +41,9 @@ use lcd1602::{Lcd1602, LcdInputPins};
 pub mod motors;
 use motors::MotorDC;
 
+static G_TIMER0: Mutex<RefCell<Option<Timer<TIMER0>>>> = Mutex::new(RefCell::new(None));
 static G_TIMER1: Mutex<RefCell<Option<Timer<TIMER1>>>> = Mutex::new(RefCell::new(None));
+static G_LCD: Mutex<RefCell<Option<Lcd1602>>> = Mutex::new(RefCell::new(None));
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -57,6 +59,9 @@ fn main() -> ! {
 
     // Take ownership of the full board
     let board = Board::take().unwrap();
+
+    // Instantiate a timer
+    let mut timer0 = Timer::new(board.TIMER0);
 
     // Initialize a 1-second timer
     let mut timer1 = Timer::new(board.TIMER1);
@@ -82,9 +87,6 @@ fn main() -> ! {
 
         G_TIMER1.borrow(cs).replace(Some(timer1));
     });
-
-    // Instantiate a timer
-    let mut timer = Timer::new(board.TIMER0);
 
     // Instantiate the LCD and initialize
     let input_pins = LcdInputPins::new(
@@ -123,10 +125,15 @@ fn main() -> ! {
         board.pins.p0_01.into_push_pull_output(Level::Low).degrade(), // P14
     );
     let mut lcd = Lcd1602::new(input_pins);
-    lcd.initialize(&mut timer);
+    free(|cs| {
+        lcd.initialize(&mut timer0);
 
-    // Greet the user
-    lcd.display_greeting(&mut timer);
+        // Greet the user
+        lcd.display_greeting(&mut timer0);
+
+        G_TIMER0.borrow(cs).replace(Some(timer0));
+        G_LCD.borrow(cs).replace(Some(lcd));
+    });
 
     // Initialize the "DC motor"
     let pwm0 = Pwm::new(board.PWM0);
@@ -145,22 +152,44 @@ fn main() -> ! {
             rprintln!("BTN_B Pressed!");
         }
 
-        timer.delay_ms(10_u32);
+        free(|cs| {
+            if let Some(ref mut timer0) = G_TIMER0.borrow(cs).borrow_mut().deref_mut() {
+                timer0.delay_ms(10_u32);
+            }
+        });
     }
 }
 
 
 #[interrupt]
 fn TIMER1() {
+    static mut COUNTER: u8 = 0;
     rprintln!("TIMER1 INTERRUPT!");
 
+    // Clear the timer interrupt flag
     free(|cs| {
         if let Some(ref mut timer1) = G_TIMER1.borrow(cs).borrow_mut().deref_mut() {
-            // Clear the interrupt flag
             timer1.event_compare_cc0().write(|w| w.events_compare().not_generated());
+        }
+    });
 
+    // Cycle through values on the LCD
+    free(|cs| {
+        if let (Some(ref mut lcd), Some(ref mut timer0)) = (G_LCD.borrow(cs).borrow_mut().deref_mut(), G_TIMER0.borrow(cs).borrow_mut().deref_mut()) {
+            lcd.backspace(3, timer0);
+
+            lcd.write_u8(*COUNTER, timer0);
+        }
+    });
+
+    
+    // Start another 1-second timer
+    free(|cs| {
+        if let Some(ref mut timer1) = G_TIMER1.borrow(cs).borrow_mut().deref_mut() {
             // Start another 1-second timer
             timer1.start(ONE_SECOND_IN_MHZ);
         }
     });
+
+    *COUNTER += 1;
 }
