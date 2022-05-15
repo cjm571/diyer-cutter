@@ -13,6 +13,7 @@ panic-rtt-target = { version = "0.1.2", features = ["cortex-m"] }
 embedded-hal = "0.2.7"
 nrf52833-hal = "0.15.0"
 microbit-v2 = "0.12.0"
+nb = "1.0.0"
 
 [[bin]]
 name = "micro-snip"

@@ -20,7 +20,14 @@ Copyright (C) 2022 CJ McAllister
 use cortex_m_rt::entry;
 use microbit::{
     board::Board,
-    hal::{gpio::Level, prelude::*, Timer},
+    hal::{
+        gpio::Level,
+        pac::{interrupt, Interrupt, NVIC},
+        prelude::*,
+        pwm::Pwm,
+        Timer,
+    },
+    pac::TIMER1,
 };
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
@@ -31,10 +38,43 @@ use lcd1602::{Lcd1602, LcdInputPins};
 pub mod motors;
 use motors::MotorDC;
 
+///////////////////////////////////////////////////////////////////////////////
+//  Named Constants
+///////////////////////////////////////////////////////////////////////////////
+
+const ONE_SECOND_IN_MHZ: u32 = 1000000;
+
 
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
+
+    // Initialize a 1-second timer
+    unsafe {
+        let timer1 = TIMER1::ptr();
+        // Stop and clear the timer before configuring it
+        (*timer1).tasks_stop.write(|w| w.tasks_stop().trigger());
+        (*timer1).tasks_clear.write(|w| w.tasks_clear().trigger());
+
+        // Set prescaler to 4, which will give us a 1MHz clock (16MHz / 2^4)
+        (*timer1).prescaler.write(|w| w.prescaler().bits(4));
+
+        // Set 32bit mode so we can fully check against a 1-second timeout in MHz
+        (*timer1).bitmode.write(|w| w.bitmode()._32bit());
+
+        // Set 1-second comparison value in the Capture/Compare register 0
+        (*timer1).cc[0].write(|w| w.cc().bits(ONE_SECOND_IN_MHZ));
+
+        // Enable and unmask the interrupt
+        (*timer1).intenset.write(|w| w.compare0().set());
+        NVIC::unmask(Interrupt::TIMER1);
+
+        // Set up the shortcut that will reset the timer when it reaches 1-second
+        (*timer1).shorts.write(|w| w.compare0_clear().enabled());
+
+        // Start the timer and u
+        (*timer1).tasks_start.write(|w| w.tasks_start().trigger());
+    }
 
     // Take ownership of the full board
     let board = Board::take().unwrap();
@@ -82,10 +122,13 @@ fn main() -> ! {
     // Greet the user
     lcd.display_greeting(&mut timer);
 
-    // Initialize the DC motor
-    let motor_dc = MotorDC::new(board.pins.p1_02.into_push_pull_output(Level::Low).degrade());
-    motor_dc.initialize(board.PWM0);
-
+    // Initialize the "DC motor"
+    let pwm0 = Pwm::new(board.PWM0);
+    let motor_dc = MotorDC::new(
+        board.pins.p1_02.into_push_pull_output(Level::Low).degrade(),
+        &pwm0,
+    );
+    motor_dc.initialize();
 
     rprintln!("Entering main loop");
     loop {
@@ -97,5 +140,17 @@ fn main() -> ! {
         }
 
         timer.delay_ms(10_u32);
+    }
+}
+
+
+#[interrupt]
+fn TIMER1() {
+    rprintln!("TIMER1 INTERRUPT!");
+
+    // Reset the interrupt flag
+    let timer1 = TIMER1::ptr();
+    unsafe {
+        (*timer1).events_compare[0].write(|w| w.events_compare().not_generated());
     }
 }

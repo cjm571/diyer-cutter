@@ -184,6 +184,7 @@ dependencies = [
  "cortex-m-rt",
  "embedded-hal",
  "microbit-v2",
+ "nb 1.0.0",
  "nrf52833-hal 0.15.0",
  "panic-halt",
  "panic-rtt-target",

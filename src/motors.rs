@@ -13,12 +13,10 @@ Copyright (C) 2022 CJ McAllister
     Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-use microbit::{
-    hal::{
-        gpio::{Output, Pin, PushPull},
-        pwm::{self, Pwm},
-    },
-    pac::PWM0,
+use microbit::hal::{
+    gpio::{Output, Pin, PushPull},
+    prelude::*,
+    pwm::{self, Pwm},
 };
 
 
@@ -26,8 +24,12 @@ use microbit::{
 //  Data Structures
 ///////////////////////////////////////////////////////////////////////////////
 
-pub struct MotorDC {
-    control_pin: Pin<Output<PushPull>>,
+pub struct MotorDC<'p, T>
+where
+    T: pwm::Instance,
+{
+    output_pin: Pin<Output<PushPull>>,
+    pwm: &'p Pwm<T>,
 }
 
 
@@ -35,14 +37,19 @@ pub struct MotorDC {
 //  Object Implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-impl MotorDC {
-    pub fn new(control_pin: Pin<Output<PushPull>>) -> Self {
-        Self { control_pin }
+impl<'p, T> MotorDC<'p, T>
+where
+    T: pwm::Instance,
+{
+    pub fn new(output_pin: Pin<Output<PushPull>>, pwm: &'p Pwm<T>) -> Self {
+        Self { output_pin, pwm }
     }
 
-    pub fn initialize(self, pwm0: PWM0) {
+    pub fn initialize(self) {
         // Set up PWM on micro:bit pin P16
-        let pwm = Pwm::new(pwm0);
-        pwm.set_output_pin(pwm::Channel::C0, self.control_pin);
+        self.pwm
+            .set_output_pin(pwm::Channel::C0, self.output_pin)
+            .set_period(500_u32.hz())
+            .set_duty_on_common(self.pwm.get_max_duty());
     }
 }

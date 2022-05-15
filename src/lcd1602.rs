@@ -95,6 +95,7 @@ impl Lcd1602 {
 }
 
 impl LcdInputPins {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         d0: Pin<Output<PushPull>>,
         d1: Pin<Output<PushPull>>,
@@ -190,7 +191,7 @@ impl LcdInputPins {
 
     pub fn write_string(&mut self, out_str: &str, timer: &mut Timer<TIMER0>) {
         // Sanity-check input
-        let lines = out_str.split("\n");
+        let lines = out_str.split('\n');
         for (i, line) in lines.enumerate() {
             if line.len() > LCD_MAX_LINE_LENGTH {
                 panic!(
