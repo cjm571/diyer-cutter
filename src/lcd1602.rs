@@ -40,19 +40,17 @@ pub struct Lcd1602 {
 }
 
 pub struct LcdInputPins {
-    d0: Pin<Output<PushPull>>,
-    d1: Pin<Output<PushPull>>,
-    d2: Pin<Output<PushPull>>,
-    d3: Pin<Output<PushPull>>,
-    d4: Pin<Output<PushPull>>,
-    d5: Pin<Output<PushPull>>,
-    d6: Pin<Output<PushPull>>,
-    d7: Pin<Output<PushPull>>,
+    d: [Pin<Output<PushPull>>; 8],
     rs: Pin<Output<PushPull>>,
     rw: Pin<Output<PushPull>>,
     en: Pin<Output<PushPull>>,
 }
 
+#[derive(PartialEq)]
+enum Direction {
+    Left,
+    Right,
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Object Implementation
@@ -95,33 +93,13 @@ impl Lcd1602 {
 }
 
 impl LcdInputPins {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        d0: Pin<Output<PushPull>>,
-        d1: Pin<Output<PushPull>>,
-        d2: Pin<Output<PushPull>>,
-        d3: Pin<Output<PushPull>>,
-        d4: Pin<Output<PushPull>>,
-        d5: Pin<Output<PushPull>>,
-        d6: Pin<Output<PushPull>>,
-        d7: Pin<Output<PushPull>>,
+        d: [Pin<Output<PushPull>>; 8],
         rs: Pin<Output<PushPull>>,
         rw: Pin<Output<PushPull>>,
         en: Pin<Output<PushPull>>,
     ) -> Self {
-        Self {
-            d0,
-            d1,
-            d2,
-            d3,
-            d4,
-            d5,
-            d6,
-            d7,
-            rs,
-            rw,
-            en,
-        }
+        Self { d, rs, rw, en }
     }
 
     fn pulse_enable(&mut self, timer: &mut Timer<TIMER0>) {
@@ -140,14 +118,9 @@ impl LcdInputPins {
     }
 
     pub fn reset_pins(&mut self) {
-        self.d0.set_low().unwrap();
-        self.d1.set_low().unwrap();
-        self.d2.set_low().unwrap();
-        self.d3.set_low().unwrap();
-        self.d4.set_low().unwrap();
-        self.d5.set_low().unwrap();
-        self.d6.set_low().unwrap();
-        self.d7.set_low().unwrap();
+        for i in 0..=7 {
+            self.d[i].set_low().unwrap();
+        }
         self.rs.set_low().unwrap();
         self.rw.set_low().unwrap();
     }
@@ -155,7 +128,7 @@ impl LcdInputPins {
     pub fn clear_display(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
-        self.d0.set_high().unwrap();
+        self.d[0].set_high().unwrap();
 
         self.pulse_enable(timer);
     }
@@ -163,9 +136,9 @@ impl LcdInputPins {
     pub fn set_8bit_2line_mode(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
-        self.d5.set_high().unwrap();
-        self.d4.set_high().unwrap();
-        self.d3.set_high().unwrap();
+        self.d[5].set_high().unwrap();
+        self.d[4].set_high().unwrap();
+        self.d[3].set_high().unwrap();
 
         self.pulse_enable(timer);
     }
@@ -173,9 +146,9 @@ impl LcdInputPins {
     pub fn set_cursor(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
-        self.d3.set_high().unwrap();
-        self.d2.set_high().unwrap();
-        self.d1.set_high().unwrap();
+        self.d[3].set_high().unwrap();
+        self.d[2].set_high().unwrap();
+        self.d[1].set_high().unwrap();
 
         self.pulse_enable(timer);
     }
@@ -183,8 +156,8 @@ impl LcdInputPins {
     pub fn set_autoincrement(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
-        self.d2.set_high().unwrap();
-        self.d1.set_high().unwrap();
+        self.d[2].set_high().unwrap();
+        self.d[1].set_high().unwrap();
 
         self.pulse_enable(timer);
     }
@@ -215,6 +188,17 @@ impl LcdInputPins {
         }
     }
 
+    pub fn backspace(&mut self, timer: &mut Timer<TIMER0>) {
+        // Shift cursor backwards
+        self.shift_cursor(Direction::Left, timer);
+
+        // Write a blank character code
+        self.write_char(32 as char, timer);
+
+        // Shift cursor backwards again in prep for next char entry
+        self.shift_cursor(Direction::Left, timer);
+    }
+
     fn write_char(&mut self, c: char, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
         self.rs.set_high().unwrap();
@@ -223,29 +207,23 @@ impl LcdInputPins {
         let ascii_idx = c as u32;
 
         // Check each bit's value and set in the corresponding data bit pin
-        if ascii_idx & (1 << 0) != 0 {
-            self.d0.set_high().unwrap();
+        for i in 0..=7 {
+            if ascii_idx & (1 << i) != 0 {
+                self.d[i].set_high().unwrap();
+            }
         }
-        if ascii_idx & (1 << 1) != 0 {
-            self.d1.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 2) != 0 {
-            self.d2.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 3) != 0 {
-            self.d3.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 4) != 0 {
-            self.d4.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 5) != 0 {
-            self.d5.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 6) != 0 {
-            self.d6.set_high().unwrap();
-        }
-        if ascii_idx & (1 << 7) != 0 {
-            self.d7.set_high().unwrap();
+
+        self.pulse_enable(timer);
+    }
+
+    fn shift_cursor(&mut self, dir: Direction, timer: &mut Timer<TIMER0>) {
+        self.reset_pins();
+
+        self.d[4].set_high().unwrap();
+
+        // Left == low, Right == high
+        if dir == Direction::Right {
+            self.d[2].set_high().unwrap();
         }
 
         self.pulse_enable(timer);
@@ -254,8 +232,8 @@ impl LcdInputPins {
     fn newline(&mut self, timer: &mut Timer<TIMER0>) {
         self.reset_pins();
 
-        self.d7.set_high().unwrap();
-        self.d6.set_high().unwrap();
+        self.d[7].set_high().unwrap();
+        self.d[6].set_high().unwrap();
 
         self.pulse_enable(timer);
     }
@@ -266,14 +244,14 @@ impl LcdInputPins {
             "rs rw d7 d6 d5 d4 d3 d2 d1 d0 en\n{}  {}  {}  {}  {}  {}  {}  {}  {}  {}  {}",
             self.rs.is_set_high().unwrap() as u32,
             self.rw.is_set_high().unwrap() as u32,
-            self.d7.is_set_high().unwrap() as u32,
-            self.d6.is_set_high().unwrap() as u32,
-            self.d5.is_set_high().unwrap() as u32,
-            self.d4.is_set_high().unwrap() as u32,
-            self.d3.is_set_high().unwrap() as u32,
-            self.d2.is_set_high().unwrap() as u32,
-            self.d1.is_set_high().unwrap() as u32,
-            self.d0.is_set_high().unwrap() as u32,
+            self.d[7].is_set_high().unwrap() as u32,
+            self.d[6].is_set_high().unwrap() as u32,
+            self.d[5].is_set_high().unwrap() as u32,
+            self.d[4].is_set_high().unwrap() as u32,
+            self.d[3].is_set_high().unwrap() as u32,
+            self.d[2].is_set_high().unwrap() as u32,
+            self.d[1].is_set_high().unwrap() as u32,
+            self.d[0].is_set_high().unwrap() as u32,
             self.en.is_set_high().unwrap() as u32,
         );
     }
