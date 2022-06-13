@@ -104,7 +104,7 @@ fn main() -> ! {
                 .col1
                 .into_push_pull_output(Level::Low)
                 .degrade(), // P4
-            board.pins.p0_17.into_push_pull_output(Level::Low).degrade(), // P13
+            board.buttons.button_a.into_push_pull_output(Level::Low).degrade(), // P5
             board
                 .display_pins
                 .col4
@@ -145,9 +145,6 @@ fn main() -> ! {
 
     rprintln!("Entering main loop");
     loop {
-        if board.buttons.button_a.is_low().unwrap() {
-            rprintln!("BTN_A Pressed!");
-        }
         if board.buttons.button_b.is_low().unwrap() {
             rprintln!("BTN_B Pressed!");
         }
