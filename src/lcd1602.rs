@@ -53,6 +53,7 @@ enum Direction {
     Right,
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////
 //  Object Implementation
 ///////////////////////////////////////////////////////////////////////////////
@@ -107,8 +108,8 @@ impl Lcd1602 {
             hundreds + ASCII_INT_OFFSET as u8,
             tens + ASCII_INT_OFFSET as u8,
             ones + ASCII_INT_OFFSET as u8,
-            ];
-        
+        ];
+
         // Encode ASCII values as &strs
         let mut tmp = [0; 3];
         for i in 0..3 {

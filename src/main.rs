@@ -16,8 +16,12 @@ Copyright (C) 2022 CJ McAllister
 
 #![no_main]
 #![no_std]
+#![feature(default_alloc_error_handler)]
 
 use core::{cell::RefCell, ops::DerefMut};
+
+extern crate alloc;
+use alloc::boxed::Box;
 
 use cortex_m::interrupt::{free, Mutex};
 use cortex_m_rt::entry;
@@ -34,6 +38,8 @@ use microbit::{
 };
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
+
+pub mod microbit_allocator;
 
 pub mod lcd1602;
 use lcd1602::{Lcd1602, LcdInputPins};
@@ -59,6 +65,8 @@ fn main() -> ! {
 
     // Take ownership of the full board
     let board = Board::take().unwrap();
+
+    let _test_box = Box::new(5);
 
     // Instantiate a timer
     let mut timer0 = Timer::new(board.TIMER0);
@@ -104,7 +112,11 @@ fn main() -> ! {
                 .col1
                 .into_push_pull_output(Level::Low)
                 .degrade(), // P4
-            board.buttons.button_a.into_push_pull_output(Level::Low).degrade(), // P5
+            board
+                .buttons
+                .button_a
+                .into_push_pull_output(Level::Low)
+                .degrade(), // P5
             board
                 .display_pins
                 .col4
@@ -166,20 +178,28 @@ fn TIMER1() {
     // Clear the timer interrupt flag
     free(|cs| {
         if let Some(ref mut timer1) = G_TIMER1.borrow(cs).borrow_mut().deref_mut() {
-            timer1.event_compare_cc0().write(|w| w.events_compare().not_generated());
+            timer1
+                .event_compare_cc0()
+                .write(|w| w.events_compare().not_generated());
         }
     });
 
     // Cycle through values on the LCD
     free(|cs| {
-        if let (Some(ref mut lcd), Some(ref mut timer0)) = (G_LCD.borrow(cs).borrow_mut().deref_mut(), G_TIMER0.borrow(cs).borrow_mut().deref_mut()) {
+        if let (Some(ref mut lcd), Some(ref mut timer0)) = (
+            G_LCD.borrow(cs).borrow_mut().deref_mut(),
+            G_TIMER0.borrow(cs).borrow_mut().deref_mut(),
+        ) {
             lcd.backspace(3, timer0);
 
-            lcd.write_u8(*COUNTER, timer0);
+            #[allow(unused_unsafe)]
+            unsafe {
+                lcd.write_u8(*COUNTER, timer0);
+            }
         }
     });
 
-    
+
     // Start another 1-second timer
     free(|cs| {
         if let Some(ref mut timer1) = G_TIMER1.borrow(cs).borrow_mut().deref_mut() {
@@ -188,5 +208,8 @@ fn TIMER1() {
         }
     });
 
-    *COUNTER += 1;
+    #[allow(unused_unsafe)]
+    unsafe {
+        *COUNTER += 1;
+    }
 }
