@@ -17,30 +17,17 @@ Copyright (C) 2022 CJ McAllister
 #![no_main]
 #![no_std]
 
-use core::{cell::RefCell, ops::DerefMut};
-
-// extern crate alloc;
-// use alloc::boxed::Box;
-
-
 use microbit::{
     board::Board,
     hal::{
-        gpio::Level,
-        pac::{interrupt, Interrupt, NVIC},
+        pac::{Interrupt, NVIC},
         prelude::*,
-        pwm::Pwm,
         Timer,
     },
     pac::{TIMER0, TIMER1},
 };
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
-
-// pub mod microbit_allocator;
-
-pub mod lcd1602;
-use lcd1602::{Lcd1602, LcdInputPins};
 
 use rtic::app;
 
@@ -58,7 +45,6 @@ mod app {
     #[shared]
     struct Shared {
         timer0: Timer<TIMER0>,
-        // lcd: Lcd1602,
     }
 
     #[local]
@@ -73,10 +59,8 @@ mod app {
         // Take ownership of the full board
         let board = Board::new(cx.device, cx.core);
 
-        // let _test_box = Box::new(5);
-
         // Instantiate a timer
-        let mut timer0 = Timer::new(board.TIMER0);
+        let timer0 = Timer::new(board.TIMER0);
 
         // Initialize a 1-second timer
         let mut timer1 = Timer::new(board.TIMER1);
@@ -85,7 +69,7 @@ mod app {
         timer1.task_clear().write(|w| w.tasks_clear().trigger());
 
         // [2022-05-15] Don't need to set prescaler or bit mode because microbit crate
-        // currently hardcode these to 1MHz and 32bit mode
+        // currently hardcodes these to 1MHz and 32bit mode
 
         // Enable and unmask the interrupt
         timer1.enable_interrupt();
@@ -99,71 +83,18 @@ mod app {
         // Start the timer
         timer1.start(ONE_SECOND_IN_MHZ);
 
-        // // Instantiate the LCD and initialize
-        // let input_pins = LcdInputPins::new(
-        //     [
-        //         board.pins.p0_02.into_push_pull_output(Level::Low).degrade(), // P0
-        //         board.pins.p0_03.into_push_pull_output(Level::Low).degrade(), // P1
-        //         board.pins.p0_04.into_push_pull_output(Level::Low).degrade(), // P2
-        //         board
-        //             .display_pins
-        //             .col3
-        //             .into_push_pull_output(Level::Low)
-        //             .degrade(), // P3
-        //         board
-        //             .display_pins
-        //             .col1
-        //             .into_push_pull_output(Level::Low)
-        //             .degrade(), // P4
-        //         board
-        //             .buttons
-        //             .button_a
-        //             .into_push_pull_output(Level::Low)
-        //             .degrade(), // P5
-        //         board
-        //             .display_pins
-        //             .col4
-        //             .into_push_pull_output(Level::Low)
-        //             .degrade(), // P6
-        //         board
-        //             .display_pins
-        //             .col2
-        //             .into_push_pull_output(Level::Low)
-        //             .degrade(), // P7
-        //     ],
-        //     board.pins.p0_09.into_push_pull_output(Level::Low).degrade(), // P9
-        //     board
-        //         .display_pins
-        //         .col5
-        //         .into_push_pull_output(Level::Low)
-        //         .degrade(), // P10
-        //     board.pins.p0_01.into_push_pull_output(Level::Low).degrade(), // P14
-        // );
-        // let mut lcd = Lcd1602::new(input_pins);
-        // lcd.initialize(&mut timer0);
-
-        // // Greet the user
-        // lcd.display_greeting(&mut timer0);
-        
-        (
-            Shared {
-                timer0,
-                // lcd,
-            },
-            Local { timer1 },
-            init::Monotonics()
-        )
+        (Shared { timer0 }, Local { timer1 }, init::Monotonics())
     }
 
-    
+
     #[idle(shared = [timer0])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
-        
+
         let mut count = 0;
-        loop {            
+        loop {
             cx.shared.timer0.lock(|timer0| {
-                timer0.delay_ms(10_u32);
+                timer0.delay_ms(100_u32);
             });
 
             count += 1;
@@ -172,23 +103,16 @@ mod app {
     }
 
 
-    #[task(shared = [timer0, /*lcd*/], local = [timer1])]
+    #[task(binds = TIMER1, local = [timer1])]
     fn timer1(cx: timer1::Context) {
         static mut COUNTER: u8 = 0;
         rprintln!("TIMER1 INTERRUPT!");
 
         // Clear the timer interrupt flag
-        cx.local.timer1.event_compare_cc0()
+        cx.local
+            .timer1
+            .event_compare_cc0()
             .write(|w| w.events_compare().not_generated());
-
-        // // Cycle through values on the LCD
-        // (cx.shared.timer0, cx.shared.lcd).lock(|timer0, lcd| {
-        //     lcd.backspace(3, timer0);
-            
-        //     #[allow(unused_unsafe)]
-        //     unsafe {
-        //         lcd.write_u8(COUNTER, timer0);
-        //     }
         // });
 
         // Start another 1-second timer
