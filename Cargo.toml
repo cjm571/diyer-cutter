@@ -1,5 +1,5 @@
 [package]
-name = "micro-snip"
+name = "diyer-cutter"
 version = "0.1.0"
 authors = ["CJ McAllister <cjm571@gmail.com>"]
 edition = "2018"
@@ -17,6 +17,6 @@ microbit-v2 = "0.13.0"
 nb = "1.0.0"
 
 [[bin]]
-name = "micro-snip"
+name = "diyer-cutter"
 test = false
 bench = false
