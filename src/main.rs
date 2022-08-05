@@ -20,9 +20,11 @@ Copyright (C) 2022 CJ McAllister
 use microbit::{
     board::Board,
     hal::{
-        pac::{Interrupt, NVIC},
+        pac::{Interrupt, NVIC, twim0::frequency::FREQUENCY_A, TWIM0},
         prelude::*,
         Timer,
+        Twim,
+        twim,
     },
     pac::{TIMER0, TIMER1},
 };
@@ -31,7 +33,7 @@ use rtt_target::{rprintln, rtt_init_print};
 
 use rtic::app;
 
-#[app(device = microbit::pac, peripherals = true, dispatchers = [SWI0_EGU0])]
+#[app(device = microbit::pac, peripherals = true)]
 mod app {
     use super::*;
 
@@ -45,6 +47,7 @@ mod app {
     #[shared]
     struct Shared {
         timer0: Timer<TIMER0>,
+        twim0: Twim<TWIM0>,
     }
 
     #[local]
@@ -83,14 +86,25 @@ mod app {
         // Start the timer
         timer1.start(ONE_SECOND_IN_MHZ);
 
-        (Shared { timer0 }, Local { timer1 }, init::Monotonics())
+        // Create an instance of the TWIM0 (I2C) device.
+        let twim0 = Twim::new(board.TWIM0, twim::Pins::from(board.i2c_external), FREQUENCY_A::K100);
+
+        (Shared { timer0, twim0 }, Local { timer1 }, init::Monotonics())
     }
 
 
-    #[idle(shared = [timer0])]
+    #[idle(shared = [timer0, twim0])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
 
+
+        // Write a dummy message out to the LCD I2C chip
+        cx.shared.twim0.lock(|twim0| {
+            let buffer = [0xFF;8];
+            twim0.write(0b0100000, &buffer).unwrap();
+        });
+
+        
         let mut count = 0;
         loop {
             cx.shared.timer0.lock(|timer0| {
