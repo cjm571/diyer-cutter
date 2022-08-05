@@ -22,6 +22,7 @@ use microbit::{
     hal::{
         pac::{Interrupt, NVIC, twim0::frequency::FREQUENCY_A, TWIM0},
         prelude::*,
+        gpio::{Pin, Input, PullDown, Level},
         Timer,
         Twim,
         twim,
@@ -53,6 +54,7 @@ mod app {
     #[local]
     struct Local {
         timer1: Timer<TIMER1>,
+        i2c_verf_pins: [Pin<Input<PullDown>>;8],
     }
 
     #[init]
@@ -89,7 +91,23 @@ mod app {
         // Create an instance of the TWIM0 (I2C) device.
         let twim0 = Twim::new(board.TWIM0, twim::Pins::from(board.i2c_external), FREQUENCY_A::K100);
 
-        (Shared { timer0, twim0 }, Local { timer1 }, init::Monotonics())
+
+        // Unset BTN_A before create I@C verification pin array
+        let button_a = board.buttons.button_a.into_push_pull_output(Level::Low);
+
+        // Create an array of GPIO pins for checking I2C chip
+        let i2c_verf_pins: [Pin<Input<PullDown>>;8] = [
+            board.pins.p0_02.into_pulldown_input().degrade(), //P0
+            board.pins.p0_03.into_pulldown_input().degrade(), //P1
+            board.pins.p0_04.into_pulldown_input().degrade(), //P2
+            board.display_pins.col3.into_pulldown_input().degrade(), //P3
+            board.display_pins.col1.into_pulldown_input().degrade(), //P4
+            button_a.into_pulldown_input().degrade(), //P5
+            board.display_pins.col4.into_pulldown_input().degrade(), //P6
+            board.display_pins.col2.into_pulldown_input().degrade(), // P7
+        ];
+
+        (Shared { timer0, twim0 }, Local { timer1, i2c_verf_pins }, init::Monotonics())
     }
 
 
@@ -112,22 +130,30 @@ mod app {
             });
 
             count += 1;
-            rprintln!("Loop #{}", count);
+            // rprintln!("Loop #{}", count);
         }
     }
 
 
-    #[task(binds = TIMER1, local = [timer1])]
+    #[task(binds = TIMER1, local = [timer1, i2c_verf_pins])]
     fn timer1(cx: timer1::Context) {
         static mut COUNTER: u8 = 0;
-        rprintln!("TIMER1 INTERRUPT!");
+        rprintln!("I2C Verf: 0b{}{}{}{}{}{}{}{}",
+        cx.local.i2c_verf_pins[7].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[6].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[5].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[4].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[3].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[2].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[1].is_high().unwrap() as u8,
+        cx.local.i2c_verf_pins[0].is_high().unwrap() as u8,
+    );
 
         // Clear the timer interrupt flag
         cx.local
             .timer1
             .event_compare_cc0()
             .write(|w| w.events_compare().not_generated());
-        // });
 
         // Start another 1-second timer
         cx.local.timer1.start(ONE_SECOND_IN_MHZ);
