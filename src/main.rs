@@ -20,10 +20,10 @@ Copyright (C) 2022 CJ McAllister
 use microbit::{
     board::{Board, I2CExternalPins},
     hal::{
-        gpio::{Input, Level, Pin, PullDown, Output, PushPull},
+        gpio::{Input, Level, Output, Pin, PullDown, PushPull},
         pac::{twim0::frequency::FREQUENCY_A, Interrupt, NVIC, TWIM0},
         prelude::*,
-        twim, Timer, Twim, timer,
+        timer, twim, Timer, Twim,
     },
     pac::{TIMER0, TIMER1},
 };
@@ -76,11 +76,11 @@ mod app {
     struct Local {
         timer1: Timer<TIMER1>,
     }
-    
+
     ///////////////////////////////////////////////////////////////////////////////
     //  RTIC Tasks
     ///////////////////////////////////////////////////////////////////////////////
-    
+
     #[init]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         rtt_init_print!();
@@ -96,7 +96,12 @@ mod app {
 
         // Initialize the TWIM0 (I2C) device
         let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
-        let i2c0 = init_i2c(board.TWIM0, board.i2c_external, &mut i2c_reset_pin.degrade(), &mut timer1);
+        let i2c0 = init_i2c(
+            board.TWIM0,
+            board.i2c_external,
+            &mut i2c_reset_pin.degrade(),
+            &mut timer1,
+        );
 
         // Create an array of GPIO pins for checking I2C chip
         let i2c_verf_pins: [Pin<Input<PullDown>>; 8] = [
@@ -125,7 +130,7 @@ mod app {
     #[idle(shared = [timer0, i2c0, &i2c_verf_pins])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
-        
+
         rprintln!(
             "Initial I2C Verf: 0b{}{}{}{}{}{}{}{}",
             cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
@@ -140,18 +145,19 @@ mod app {
 
         // Write some MCP23008 Registers to verify I2C functionality
         cx.shared.i2c0.lock(|i2c0| {
-            let reg_addr: [u8;1] = [MCP23008Register::GPIO as u8];
-            let mut rd_buffer: [u8;1] = [0x00];
-            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
-            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
-    
-            let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::GPIO as u8, 0b10101010];
-            i2c0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
-            
-            rd_buffer = [0x00];
-            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+            let reg_addr: [u8; 1] = [MCP23008Register::GPIO as u8];
+            let mut rd_buffer: [u8; 1] = [0x00];
+            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer)
+                .unwrap();
             rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
 
+            let reg_addr_and_wr_buffer: [u8; 2] = [MCP23008Register::GPIO as u8, 0b10101010];
+            i2c0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+
+            rd_buffer = [0x00];
+            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer)
+                .unwrap();
+            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
         });
 
 
@@ -188,18 +194,20 @@ mod app {
         cx.local.timer1.start(ONE_SECOND_IN_MHZ);
     }
 
-    
+
     ///////////////////////////////////////////////////////////////////////////////
     //  Helper Functions
     ///////////////////////////////////////////////////////////////////////////////
-    
+
     fn init_1s_timer<T: timer::Instance>(instance: T) -> Timer<T> {
         // Create the Timer object
         let mut timer_device = Timer::new(instance);
 
         // Stop and clear the timer before configuring it
         timer_device.task_stop().write(|w| w.tasks_stop().trigger());
-        timer_device.task_clear().write(|w| w.tasks_clear().trigger());
+        timer_device
+            .task_clear()
+            .write(|w| w.tasks_clear().trigger());
 
         // [2022-05-15] Don't need to set prescaler or bit mode because microbit crate
         // currently hardcodes these to 1MHz and 32bit mode
@@ -219,13 +227,14 @@ mod app {
         timer_device
     }
 
-    fn init_i2c<T: twim::Instance, U: timer::Instance>(instance: T, i2c_pins: I2CExternalPins, reset_pin: &mut Pin<Output<PushPull>>, timer_device: &mut Timer<U>) -> Twim<T> {
+    fn init_i2c<T: twim::Instance, U: timer::Instance>(
+        instance: T,
+        i2c_pins: I2CExternalPins,
+        reset_pin: &mut Pin<Output<PushPull>>,
+        timer_device: &mut Timer<U>,
+    ) -> Twim<T> {
         // Create the TWIM object
-        let mut i2c_device = Twim::new(
-            instance,
-            twim::Pins::from(i2c_pins),
-            FREQUENCY_A::K100,
-        );
+        let mut i2c_device = Twim::new(instance, twim::Pins::from(i2c_pins), FREQUENCY_A::K100);
 
         // Reset all I2C chips via I2C Reset Pin
         reset_pin.set_low().unwrap();
@@ -233,8 +242,10 @@ mod app {
         reset_pin.set_high().unwrap();
 
         // Set all pins on LCD Display's MCP23008 to Output mode
-        let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::IODIR as u8, 0b00000000];
-        i2c_device.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+        let reg_addr_and_wr_buffer: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
+        i2c_device
+            .write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer)
+            .unwrap();
 
         i2c_device
     }
