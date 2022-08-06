@@ -41,7 +41,11 @@ mod app {
     ///////////////////////////////////////////////////////////////////////////////
 
     const ONE_SECOND_IN_MHZ: u32 = 1000000;
+
+    /* MCP23008 Consts */
     const I2C_SLAVE_ADDR: u8 = 0b0100000;
+    const IODIR_REG_ADDR: u8 = 0x00;
+    const IPOL_REG_ADDR: u8 = 0x01;
 
 
     #[shared]
@@ -127,11 +131,33 @@ mod app {
     #[idle(shared = [timer0, twim0, &i2c_verf_pins])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
+        
+        rprintln!(
+            "Initial I2C Verf: 0b{}{}{}{}{}{}{}{}",
+            cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
+            cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
+        );
 
-        // Write a dummy message out to the LCD I2C chip
+        // Read some MCP23008 Registers to verify I2C functionality
         cx.shared.twim0.lock(|twim0| {
-            let buffer = [0x00; 8];
-            twim0.write(I2C_SLAVE_ADDR, &buffer).unwrap();
+            let mut wr_buffer: [u8;1] = [IODIR_REG_ADDR];
+            let mut rd_buffer: [u8;1] = [0x00];
+
+            // IODIR
+            twim0.write_then_read(I2C_SLAVE_ADDR, &wr_buffer, &mut rd_buffer).unwrap();
+            rprintln!("IODIR: {:?}", rd_buffer);
+
+            // IPOL
+            wr_buffer = [IPOL_REG_ADDR];
+            rd_buffer = [0x00];
+            twim0.write_then_read(I2C_SLAVE_ADDR, &wr_buffer, &mut rd_buffer).unwrap();
+            rprintln!("IPOL: {:?}", rd_buffer);
         });
 
 
@@ -141,17 +167,17 @@ mod app {
                 timer0.delay_ms(100_u32);
             });
 
-            rprintln!(
-                "I2C Verf: 0b{}{}{}{}{}{}{}{}",
-                cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
-            );
+            // rprintln!(
+            //     "I2C Verf: 0b{}{}{}{}{}{}{}{}",
+            //     cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
+            //     cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
+            // );
         }
     }
 
