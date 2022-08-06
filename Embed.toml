@@ -1,12 +1,15 @@
 [default.general]
 chip = "nrf52833_xxAA" # uncomment this line for micro:bit V2
-# chip = "nrf51822_xxAA" # uncomment this line for micro:bit V1
 
 [default.reset]
 halt_afterwards = false
 
 [default.rtt]
 enabled = true
+# Whether to save rtt history buffer on exit.
+log_enabled = true
+# Where to save rtt history buffer relative to manifest path.
+log_path = "./logs"
 
 [default.gdb]
 enabled = true
