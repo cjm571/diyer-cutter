@@ -33,7 +33,8 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c_periphs;
-use crate::i2c_periphs::lcd1602;
+use crate::i2c_periphs::{I2C_ADDR_LCD, MCP23008Register};
+
 
 #[app(device = microbit::pac, peripherals = true)]
 mod app {
@@ -45,28 +46,10 @@ mod app {
 
     const ONE_SECOND_IN_MHZ: u32 = 1000000;
 
-    /* MCP23008 Consts */
-    const I2C_SLAVE_ADDR: u8 = 0b0100000;
-
 
     ///////////////////////////////////////////////////////////////////////////////
     //  Data Structures
     ///////////////////////////////////////////////////////////////////////////////
-
-    #[allow(dead_code)]
-    enum MCP23008Register {
-        IODIR = 0x00,
-        IPOL = 0x01,
-        GPINTEN = 0x02,
-        DEFVEL = 0x03,
-        INTCON = 0x04,
-        IOCON = 0x05,
-        GPPU = 0x06,
-        INTF = 0x07,
-        INTCAP = 0x08,
-        GPIO = 0x09,
-        OLAT = 0x0A,
-    }
 
     #[shared]
     struct Shared {
@@ -152,15 +135,15 @@ mod app {
         cx.shared.i2c0.lock(|i2c0| {
             let reg_addr: [u8; 1] = [MCP23008Register::GPIO as u8];
             let mut rd_buffer: [u8; 1] = [0x00];
-            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer)
+            i2c0.write_then_read(I2C_ADDR_LCD, &reg_addr, &mut rd_buffer)
                 .unwrap();
             rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
 
             let reg_addr_and_wr_buffer: [u8; 2] = [MCP23008Register::GPIO as u8, 0b10101010];
-            i2c0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+            i2c0.write(I2C_ADDR_LCD, &reg_addr_and_wr_buffer).unwrap();
 
             rd_buffer = [0x00];
-            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer)
+            i2c0.write_then_read(I2C_ADDR_LCD, &reg_addr, &mut rd_buffer)
                 .unwrap();
             rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
         });
@@ -247,9 +230,9 @@ mod app {
         reset_pin.set_high().unwrap();
 
         // Set all pins on LCD Display's MCP23008 to Output mode
-        let reg_addr_and_wr_buffer: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
+        let reg_addr_and_data: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
         i2c_device
-            .write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer)
+            .write(I2C_ADDR_LCD, &reg_addr_and_data)
             .unwrap();
 
         i2c_device
