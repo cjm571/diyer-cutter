@@ -18,12 +18,12 @@ Copyright (C) 2022 CJ McAllister
 #![no_std]
 
 use microbit::{
-    board::Board,
+    board::{Board, I2CExternalPins},
     hal::{
-        gpio::{Input, Level, Pin, PullDown},
+        gpio::{Input, Level, Pin, PullDown, Output, PushPull},
         pac::{twim0::frequency::FREQUENCY_A, Interrupt, NVIC, TWIM0},
         prelude::*,
-        twim, Timer, Twim,
+        twim, Timer, Twim, timer,
     },
     pac::{TIMER0, TIMER1},
 };
@@ -68,7 +68,7 @@ mod app {
     #[shared]
     struct Shared {
         timer0: Timer<TIMER0>,
-        twim0: Twim<TWIM0>,
+        i2c0: Twim<TWIM0>,
         i2c_verf_pins: [Pin<Input<PullDown>>; 8],
     }
 
@@ -76,7 +76,11 @@ mod app {
     struct Local {
         timer1: Timer<TIMER1>,
     }
-
+    
+    ///////////////////////////////////////////////////////////////////////////////
+    //  RTIC Tasks
+    ///////////////////////////////////////////////////////////////////////////////
+    
     #[init]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         rtt_init_print!();
@@ -88,51 +92,11 @@ mod app {
         let timer0 = Timer::new(board.TIMER0);
 
         // Initialize a 1-second timer
-        let mut timer1 = Timer::new(board.TIMER1);
-        // Stop and clear the timer before configuring it
-        timer1.task_stop().write(|w| w.tasks_stop().trigger());
-        timer1.task_clear().write(|w| w.tasks_clear().trigger());
+        let mut timer1 = init_1s_timer(board.TIMER1);
 
-        // [2022-05-15] Don't need to set prescaler or bit mode because microbit crate
-        // currently hardcodes these to 1MHz and 32bit mode
-
-        // Enable and unmask the interrupt
-        timer1.enable_interrupt();
-        unsafe {
-            NVIC::unmask(Interrupt::TIMER1);
-        }
-
-        // [2022-05-15] microbit crate currently does not expose the SHORTS register space
-        // Cannot configure timer to auto-reset on reaching the specified tick count
-
-        // Start the timer
-        timer1.start(ONE_SECOND_IN_MHZ);
-
-        // Create an instance of the TWIM0 (I2C) device.
-        let mut twim0 = Twim::new(
-            board.TWIM0,
-            twim::Pins::from(board.i2c_external),
-            FREQUENCY_A::K100,
-        );
-
-        // Reset all I2C chips via I2C Reset Pin (P16)
-        let mut i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
-        i2c_reset_pin.set_low().unwrap();
-        timer1.delay_us(1_u32);
-        i2c_reset_pin.set_high().unwrap();
-
-        // Set all pins on LCD Display's MCP23008 to Output mode
-        let reg_addr: [u8;1] = [MCP23008Register::IODIR as u8];
-        let mut rd_buffer: [u8;1] = [0x00];
-        twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
-        rprintln!("IODIR: {:0>8b}", rd_buffer[0]);
-
-        let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::IODIR as u8, 0b00000000];
-        twim0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
-        
-        rd_buffer = [0x00];
-        twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
-        rprintln!("IODIR: {:0>8b}", rd_buffer[0]);
+        // Initialize the TWIM0 (I2C) device
+        let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
+        let i2c0 = init_i2c(board.TWIM0, board.i2c_external, &mut i2c_reset_pin.degrade(), &mut timer1);
 
         // Create an array of GPIO pins for checking I2C chip
         let i2c_verf_pins: [Pin<Input<PullDown>>; 8] = [
@@ -149,7 +113,7 @@ mod app {
         (
             Shared {
                 timer0,
-                twim0,
+                i2c0,
                 i2c_verf_pins,
             },
             Local { timer1 },
@@ -158,7 +122,7 @@ mod app {
     }
 
 
-    #[idle(shared = [timer0, twim0, &i2c_verf_pins])]
+    #[idle(shared = [timer0, i2c0, &i2c_verf_pins])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
         
@@ -175,17 +139,17 @@ mod app {
         );
 
         // Write some MCP23008 Registers to verify I2C functionality
-        cx.shared.twim0.lock(|twim0| {
+        cx.shared.i2c0.lock(|i2c0| {
             let reg_addr: [u8;1] = [MCP23008Register::GPIO as u8];
             let mut rd_buffer: [u8;1] = [0x00];
-            twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
             rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
     
             let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::GPIO as u8, 0b10101010];
-            twim0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+            i2c0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
             
             rd_buffer = [0x00];
-            twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+            i2c0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
             rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
 
         });
@@ -222,5 +186,56 @@ mod app {
 
         // Start another 1-second timer
         cx.local.timer1.start(ONE_SECOND_IN_MHZ);
+    }
+
+    
+    ///////////////////////////////////////////////////////////////////////////////
+    //  Helper Functions
+    ///////////////////////////////////////////////////////////////////////////////
+    
+    fn init_1s_timer<T: timer::Instance>(instance: T) -> Timer<T> {
+        // Create the Timer object
+        let mut timer_device = Timer::new(instance);
+
+        // Stop and clear the timer before configuring it
+        timer_device.task_stop().write(|w| w.tasks_stop().trigger());
+        timer_device.task_clear().write(|w| w.tasks_clear().trigger());
+
+        // [2022-05-15] Don't need to set prescaler or bit mode because microbit crate
+        // currently hardcodes these to 1MHz and 32bit mode
+
+        // Enable and unmask the interrupt
+        timer_device.enable_interrupt();
+        unsafe {
+            NVIC::unmask(Interrupt::TIMER1);
+        }
+
+        // [2022-05-15] microbit crate currently does not expose the SHORTS register space
+        // Cannot configure timer to auto-reset on reaching the specified tick count
+
+        // Start the timer
+        timer_device.start(ONE_SECOND_IN_MHZ);
+
+        timer_device
+    }
+
+    fn init_i2c<T: twim::Instance, U: timer::Instance>(instance: T, i2c_pins: I2CExternalPins, reset_pin: &mut Pin<Output<PushPull>>, timer_device: &mut Timer<U>) -> Twim<T> {
+        // Create the TWIM object
+        let mut i2c_device = Twim::new(
+            instance,
+            twim::Pins::from(i2c_pins),
+            FREQUENCY_A::K100,
+        );
+
+        // Reset all I2C chips via I2C Reset Pin
+        reset_pin.set_low().unwrap();
+        timer_device.delay_us(1_u32);
+        reset_pin.set_high().unwrap();
+
+        // Set all pins on LCD Display's MCP23008 to Output mode
+        let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::IODIR as u8, 0b00000000];
+        i2c_device.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+
+        i2c_device
     }
 }
