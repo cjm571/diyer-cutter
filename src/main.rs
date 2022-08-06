@@ -32,6 +32,9 @@ use rtt_target::{rprintln, rtt_init_print};
 
 use rtic::app;
 
+mod i2c_periphs;
+use crate::i2c_periphs::lcd1602;
+
 #[app(device = microbit::pac, peripherals = true)]
 mod app {
     use super::*;
@@ -77,6 +80,7 @@ mod app {
         timer1: Timer<TIMER1>,
     }
 
+    
     ///////////////////////////////////////////////////////////////////////////////
     //  RTIC Tasks
     ///////////////////////////////////////////////////////////////////////////////
@@ -114,6 +118,7 @@ mod app {
             board.display_pins.col2.into_pulldown_input().degrade(), // P7
             board.pins.p0_10.into_pulldown_input().degrade(), // P8
         ];
+
 
         (
             Shared {
