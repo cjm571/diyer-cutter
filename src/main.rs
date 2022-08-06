@@ -44,9 +44,26 @@ mod app {
 
     /* MCP23008 Consts */
     const I2C_SLAVE_ADDR: u8 = 0b0100000;
-    const IODIR_REG_ADDR: u8 = 0x00;
-    const IPOL_REG_ADDR: u8 = 0x01;
 
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //  Data Structures
+    ///////////////////////////////////////////////////////////////////////////////
+
+    #[allow(dead_code)]
+    enum MCP23008Register {
+        IODIR = 0x00,
+        IPOL = 0x01,
+        GPINTEN = 0x02,
+        DEFVEL = 0x03,
+        INTCON = 0x04,
+        IOCON = 0x05,
+        GPPU = 0x06,
+        INTF = 0x07,
+        INTCAP = 0x08,
+        GPIO = 0x09,
+        OLAT = 0x0A,
+    }
 
     #[shared]
     struct Shared {
@@ -92,11 +109,30 @@ mod app {
         timer1.start(ONE_SECOND_IN_MHZ);
 
         // Create an instance of the TWIM0 (I2C) device.
-        let twim0 = Twim::new(
+        let mut twim0 = Twim::new(
             board.TWIM0,
             twim::Pins::from(board.i2c_external),
             FREQUENCY_A::K100,
         );
+
+        // Reset all I2C chips via I2C Reset Pin (P16)
+        let mut i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
+        i2c_reset_pin.set_low().unwrap();
+        timer1.delay_us(1_u32);
+        i2c_reset_pin.set_high().unwrap();
+
+        // Set all pins on LCD Display's MCP23008 to Output mode
+        let reg_addr: [u8;1] = [MCP23008Register::IODIR as u8];
+        let mut rd_buffer: [u8;1] = [0x00];
+        twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+        rprintln!("IODIR: {:0>8b}", rd_buffer[0]);
+
+        let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::IODIR as u8, 0b00000000];
+        twim0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+        
+        rd_buffer = [0x00];
+        twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+        rprintln!("IODIR: {:0>8b}", rd_buffer[0]);
 
         // Create an array of GPIO pins for checking I2C chip
         let i2c_verf_pins: [Pin<Input<PullDown>>; 8] = [
@@ -109,12 +145,6 @@ mod app {
             board.display_pins.col2.into_pulldown_input().degrade(), // P7
             board.pins.p0_10.into_pulldown_input().degrade(), // P8
         ];
-
-        // Reset all I2C chips via I2C Reset Pin (P16)
-        let mut i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
-        i2c_reset_pin.set_low().unwrap();
-        timer1.delay_us(1_u32);
-        i2c_reset_pin.set_high().unwrap();
 
         (
             Shared {
@@ -144,20 +174,20 @@ mod app {
             cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
         );
 
-        // Read some MCP23008 Registers to verify I2C functionality
+        // Write some MCP23008 Registers to verify I2C functionality
         cx.shared.twim0.lock(|twim0| {
-            let mut wr_buffer: [u8;1] = [IODIR_REG_ADDR];
+            let reg_addr: [u8;1] = [MCP23008Register::GPIO as u8];
             let mut rd_buffer: [u8;1] = [0x00];
-
-            // IODIR
-            twim0.write_then_read(I2C_SLAVE_ADDR, &wr_buffer, &mut rd_buffer).unwrap();
-            rprintln!("IODIR: {:?}", rd_buffer);
-
-            // IPOL
-            wr_buffer = [IPOL_REG_ADDR];
+            twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
+    
+            let reg_addr_and_wr_buffer: [u8;2] = [MCP23008Register::GPIO as u8, 0b10101010];
+            twim0.write(I2C_SLAVE_ADDR, &reg_addr_and_wr_buffer).unwrap();
+            
             rd_buffer = [0x00];
-            twim0.write_then_read(I2C_SLAVE_ADDR, &wr_buffer, &mut rd_buffer).unwrap();
-            rprintln!("IPOL: {:?}", rd_buffer);
+            twim0.write_then_read(I2C_SLAVE_ADDR, &reg_addr, &mut rd_buffer).unwrap();
+            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
+
         });
 
 
@@ -167,17 +197,17 @@ mod app {
                 timer0.delay_ms(100_u32);
             });
 
-            // rprintln!(
-            //     "I2C Verf: 0b{}{}{}{}{}{}{}{}",
-            //     cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
-            //     cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
-            // );
+            rprintln!(
+                "I2C Verf: 0b{}{}{}{}{}{}{}{}",
+                cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
+                cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
+            );
         }
     }
 
