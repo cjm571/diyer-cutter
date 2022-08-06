@@ -95,7 +95,7 @@ mod app {
         let mut timer1 = init_1s_timer(board.TIMER1);
 
         // Initialize the TWIM0 (I2C) device
-        let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High);
+        let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High); // P16
         let i2c0 = init_i2c(
             board.TWIM0,
             board.i2c_external,
