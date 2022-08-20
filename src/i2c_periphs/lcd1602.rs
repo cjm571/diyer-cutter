@@ -15,7 +15,7 @@ Copyright (C) 2022 CJ McAllister
 
 use microbit::{
     hal::{
-        gpio::{Output, Pin, PushPull},
+        gpio::{Output, Pin, PushPull, Input, PullDown},
         prelude::*,
         Timer, timer, twim, Twim,
     },
@@ -36,11 +36,12 @@ const ASCII_INT_OFFSET: usize = 48;
 const MASK_EN: u8 = 0b00000001;
 const MASK_RW: u8 = 0b00000010;
 const MASK_RS: u8 = 0b00000100;
-const MASK_D0: u8 = 0b00001000;
-const MASK_D1: u8 = 0b00010000;
-const MASK_D3: u8 = 0b00100000;
-const MASK_D4: u8 = 0b01000000;
+const MASK_D4: u8 = 0b00001000;
+const MASK_D5: u8 = 0b00010000;
+const MASK_D6: u8 = 0b00100000;
+const MASK_D7: u8 = 0b01000000;
 const MASK_ALL: u8 = 0b01111111;
+const MASK_NONE: u8 = 0b00000000;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -52,10 +53,7 @@ pub struct Lcd1602 {
 }
 
 pub struct LcdInputPins {
-    d: [Pin<Output<PushPull>>; 8],
-    rs: Pin<Output<PushPull>>,
-    rw: Pin<Output<PushPull>>,
-    en: Pin<Output<PushPull>>,
+    i2c_verf_pins: [Pin<Input<PullDown>>; 8]
 }
 
 #[derive(PartialEq)]
@@ -76,13 +74,17 @@ impl Lcd1602 {
     }
 
     pub fn initialize<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        // Wait a little bit before entering main loop
+        // Allow time for LCD VCC to rist to 4.5V
         rprintln!("Giving LCD time to initialize...");
-        timer.delay_ms(15_u32);
+        timer.delay_ms(1000_u32);
+
+        // // Manually reset the LCD controller
+        // rprintln!("Manually resetting LCD via instruction sequence...");
+        // self.manual_reset(timer, i2c);
 
         // Set up LCD for 8-bit, 2-line mode
-        self.input_pins.set_8bit_2line_mode(timer, i2c);
-        rprintln!("Setting LCD up for 8bit, 2line mode...");
+        self.input_pins.set_4bit_2line_mode(timer, i2c);
+        rprintln!("Setting LCD up for 4bit, 2line mode...");
 
         // Set up LCD cursor
         self.input_pins.set_cursor(timer, i2c);
@@ -95,6 +97,36 @@ impl Lcd1602 {
         // Clear the display before anything is written
         self.input_pins.clear_display(timer, i2c);
         rprintln!("Clearing display...");
+
+        //FIXME: DEBUG DELETE
+        rprintln!("LCD Initilization Complete");
+    }
+
+    pub fn initialize_4b_1l<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        // 1. Allow time for LCD VCC to rist to 4.5V
+        rprintln!("Giving LCD time to initialize...");
+        timer.delay_ms(1000_u32);
+
+        // 2. Set up LCD for 4-bit operation
+        rprintln!("Setting LCD up for 4bit Operation...");
+        self.input_pins.set_4bit_op(timer, i2c);
+
+        // 3. Set 4-bit operation (again) and selects 1-line display
+        rprintln!("Setting LCD up for 1-Line Mode...");
+        self.input_pins.set_4bit_op(timer, i2c);
+        self.input_pins.set_1line_mode(timer, i2c);
+
+        // 4. Turn on display/cursor
+        rprintln!("Turning on LCD Display and Cursor...");
+        self.input_pins.set_cursor(timer, i2c);
+
+        //FIXME: DEBUG DELETE
+        rprintln!("LCD Initilization Complete");
+    }
+
+    //TODO: Fix this weird straddled architecture
+    pub fn manual_reset<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        self.input_pins.manual_reset(timer, i2c);
     }
 
     pub fn display_greeting<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
@@ -137,13 +169,72 @@ impl Lcd1602 {
 }
 
 impl LcdInputPins {
-    pub fn new(
-        d: [Pin<Output<PushPull>>; 8],
-        rs: Pin<Output<PushPull>>,
-        rw: Pin<Output<PushPull>>,
-        en: Pin<Output<PushPull>>,
-    ) -> Self {
-        Self { d, rs, rw, en }
+    pub fn new(i2c_verf_pins: [Pin<Input<PullDown>>; 8]) -> Self {
+        Self {i2c_verf_pins}
+    }
+
+    pub fn manual_reset<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        // 1. Function Set pt. 1
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4 | MASK_D5, i2c);
+        self.pulse_enable(timer, i2c);
+
+        // 2. Wait >4.1ms
+        timer.delay_ms(1000_u32);
+
+        // 3. Function Set pt. 2 (Same values as pt 1)
+        self.pulse_enable(timer, i2c);
+
+        // 4. Wait for >100us
+        timer.delay_ms(1000_u32);
+
+        // 5. Function Set pt. 3 (Same values as pt 1, again)
+        self.pulse_enable(timer, i2c);
+
+        // Wait for > execution time
+        timer.delay_ms(1000_u32);
+
+        // 6. Set interface data length to 4 bits
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        self.pulse_enable(timer, i2c);
+
+        // 7. (Final) Function Set, higher-order bits are same as last command
+        self.pulse_enable(timer, i2c);
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D7, i2c);
+        self.pulse_enable(timer, i2c);
+        
+        // Wait for > execution time
+        timer.delay_ms(1000_u32);
+
+        // 8. Turn display off
+        self.reset_pins(timer, i2c);
+        self.pulse_enable(timer, i2c);
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D7, i2c);
+        self.pulse_enable(timer, i2c);
+        
+        // Wait for > execution time
+        timer.delay_ms(1000_u32);
+
+        // 9. Clear display
+        self.reset_pins(timer, i2c);
+        self.pulse_enable(timer, i2c);
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4, i2c);
+        self.pulse_enable(timer, i2c);
+        
+        // Wait for > execution time
+        timer.delay_ms(1000_u32);
+
+        // 10. Entry mode set
+        self.reset_pins(timer, i2c);
+        self.pulse_enable(timer, i2c);
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5 | MASK_D6, i2c);
+        self.pulse_enable(timer, i2c);
+
     }
 
     pub fn write_string<T: timer::Instance, U: twim::Instance>(&mut self, out_str: &str, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
@@ -186,126 +277,239 @@ impl LcdInputPins {
     }
 
     fn pulse_enable<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        #[cfg(feature = "debug_pulse_en")]
+        {
+            rprintln!("+++ EN PULSE");
+            rprintln!("_7654SWE");
+            rprintln!(
+                "{}{}{}{}{}{}{}{}",
+                self.i2c_verf_pins[0].is_high().unwrap() as u8,
+                self.i2c_verf_pins[1].is_high().unwrap() as u8,
+                self.i2c_verf_pins[2].is_high().unwrap() as u8,
+                self.i2c_verf_pins[3].is_high().unwrap() as u8,
+                self.i2c_verf_pins[4].is_high().unwrap() as u8,
+                self.i2c_verf_pins[5].is_high().unwrap() as u8,
+                self.i2c_verf_pins[6].is_high().unwrap() as u8,
+                self.i2c_verf_pins[7].is_high().unwrap() as u8,
+            );
+        }
+        
         // Delay before setting Enable high to ensure that Address Settling time (60ns) is not violated
         timer.delay_us(1000_u32);
 
         // Set EN high
         rmw_mask_val_set(MCP23008Register::GPIO, MASK_EN, i2c);
+        
+        #[cfg(feature = "debug_pulse_en")]
+        {
+            rprintln!(
+                "{}{}{}{}{}{}{}{}",
+                self.i2c_verf_pins[0].is_high().unwrap() as u8,
+                self.i2c_verf_pins[1].is_high().unwrap() as u8,
+                self.i2c_verf_pins[2].is_high().unwrap() as u8,
+                self.i2c_verf_pins[3].is_high().unwrap() as u8,
+                self.i2c_verf_pins[4].is_high().unwrap() as u8,
+                self.i2c_verf_pins[5].is_high().unwrap() as u8,
+                self.i2c_verf_pins[6].is_high().unwrap() as u8,
+                self.i2c_verf_pins[7].is_high().unwrap() as u8,
+            );
+        }
 
         // Enable must be held high for at least 500ns (at 3.3V operation) per HD44780U datasheet
         // However, in practice holding for just 500us was unstable, so hold for 1000us
         timer.delay_us(1000_u32);
 
         // Set EN low
-        rmw_mask_val_unset(MCP23008Register::GPIO, MASK_EN, i2c);
+        rmw_mask_val_unset(MCP23008Register::GPIO, MASK_EN, timer, i2c);
+        #[cfg(feature = "debug_pulse_en")]
+        {
+            rprintln!(
+                "{}{}{}{}{}{}{}{}\n",
+                self.i2c_verf_pins[0].is_high().unwrap() as u8,
+                self.i2c_verf_pins[1].is_high().unwrap() as u8,
+                self.i2c_verf_pins[2].is_high().unwrap() as u8,
+                self.i2c_verf_pins[3].is_high().unwrap() as u8,
+                self.i2c_verf_pins[4].is_high().unwrap() as u8,
+                self.i2c_verf_pins[5].is_high().unwrap() as u8,
+                self.i2c_verf_pins[6].is_high().unwrap() as u8,
+                self.i2c_verf_pins[7].is_high().unwrap() as u8,
+            );
+        }
 
         // Delay another 1us to ensure Enable Cycle Time minimum (1000ns) is not violated
         timer.delay_us(1000_u32);
     }
 
-    pub fn reset_pins<U: twim::Instance>(&mut self, i2c: &mut Twim<U>) {
-        rmw_mask_val_unset(MCP23008Register::GPIO, MASK_ALL, i2c)
+    pub fn reset_pins<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        #[cfg(feature = "debug_reset")]
+        {
+            rprintln!("--- PRE-RESET");
+            rprintln!("_7654SWE");
+            rprintln!(
+                "{}{}{}{}{}{}{}{}",
+                self.i2c_verf_pins[0].is_high().unwrap() as u8,
+                self.i2c_verf_pins[1].is_high().unwrap() as u8,
+                self.i2c_verf_pins[2].is_high().unwrap() as u8,
+                self.i2c_verf_pins[3].is_high().unwrap() as u8,
+                self.i2c_verf_pins[4].is_high().unwrap() as u8,
+                self.i2c_verf_pins[5].is_high().unwrap() as u8,
+                self.i2c_verf_pins[6].is_high().unwrap() as u8,
+                self.i2c_verf_pins[7].is_high().unwrap() as u8,
+            );
+        }
+        
+        rmw_mask_val_unset(MCP23008Register::GPIO, MASK_ALL, timer, i2c);
+
+        #[cfg(feature = "debug_reset")]
+        {
+            rprintln!("--- POST-RESET");
+            rprintln!("_7654SWE");
+            rprintln!(
+                "{}{}{}{}{}{}{}{}\n",
+                self.i2c_verf_pins[0].is_high().unwrap() as u8,
+                self.i2c_verf_pins[1].is_high().unwrap() as u8,
+                self.i2c_verf_pins[2].is_high().unwrap() as u8,
+                self.i2c_verf_pins[3].is_high().unwrap() as u8,
+                self.i2c_verf_pins[4].is_high().unwrap() as u8,
+                self.i2c_verf_pins[5].is_high().unwrap() as u8,
+                self.i2c_verf_pins[6].is_high().unwrap() as u8,
+                self.i2c_verf_pins[7].is_high().unwrap() as u8,
+            );
+        }
     }
 
-    //FIXME: Update to I2C
     pub fn clear_display<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
+        // Higher-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_NONE, i2c);
+        self.pulse_enable(timer, i2c);
 
-        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D0, i2c);
-
+        // Lower-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4, i2c);
         self.pulse_enable(timer, i2c);
     }
 
-    //FIXME: Update to I2C
-    pub fn set_8bit_2line_mode<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
+    pub fn set_4bit_op<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        self.pulse_enable(timer, i2c);    
+    }
 
-        self.d[5].set_high().unwrap();
-        self.d[4].set_high().unwrap();
-        self.d[3].set_high().unwrap();
+    pub fn set_1line_mode<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        self.reset_pins(timer, i2c);
+        self.pulse_enable(timer, i2c);    
+    }
 
+    pub fn set_4bit_2line_mode<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+        // First phase of Function Set command - sets 4-bit operation mode (just one write, unlike most others)
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        self.pulse_enable(timer, i2c);
+
+        // Second phase of Function Set command - sets 4-bit, 2-line mode
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        self.pulse_enable(timer, i2c);
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D7, i2c);
         self.pulse_enable(timer, i2c);
     }
 
-    //FIXME: Update to I2C
     pub fn set_cursor<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
+        // Higher-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_NONE, i2c);
+        self.pulse_enable(timer, i2c);
 
-        self.d[3].set_high().unwrap();
-        self.d[2].set_high().unwrap();
-        self.d[1].set_high().unwrap();
-
+        // Lower-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5 | MASK_D6 | MASK_D7, i2c);
         self.pulse_enable(timer, i2c);
     }
 
-    //FIXME: Update to I2C
     pub fn set_autoincrement<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
+        // Higher-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_NONE, i2c);
+        self.pulse_enable(timer, i2c);
 
-        self.d[2].set_high().unwrap();
-        self.d[1].set_high().unwrap();
-
+        // Lower-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6 | MASK_D7, i2c);
         self.pulse_enable(timer, i2c);
     }
 
-    //FIXME: Update to I2C
     fn write_char<T: timer::Instance, U: twim::Instance>(&mut self, c: char, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
-        self.rs.set_high().unwrap();
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_RS, i2c);
 
         // Get the ASCII index of the character
         let ascii_idx = c as u32;
 
-        // Check each bit's value and set in the corresponding data bit pin
-        for i in 0..=7 {
-            if ascii_idx & (1 << i) != 0 {
-                self.d[i].set_high().unwrap();
-            }
+        // Check each higher-order bit's value and set in the corresponding data bit pin
+        //TODO: This can very likely be optimized by using the shifted value directly
+        if ascii_idx & (1 << 4) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4, i2c);
         }
-
+        if ascii_idx & (1 << 5) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        }
+        if ascii_idx & (1 << 6) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6, i2c);
+        }
+        if ascii_idx & (1 << 7) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D7, i2c);
+        }
         self.pulse_enable(timer, i2c);
+
+        // Check each lower-order bit's value and set in the corresponding data bit pin
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_RS, i2c);
+        //TODO: This can very likely be optimized by using the shifted value directly
+        if ascii_idx & (1 << 0) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4, i2c);
+        }
+        if ascii_idx & (1 << 1) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5, i2c);
+        }
+        if ascii_idx & (1 << 2) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6, i2c);
+        }
+        if ascii_idx & (1 << 3) != 0 {
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D7, i2c);
+        }
+        self.pulse_enable(timer, i2c);
+
+
+
     }
 
-    //FIXME: Update to I2C
     fn shift_cursor<T: timer::Instance, U: twim::Instance>(&mut self, dir: Direction, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
+        // Higher-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D4, i2c);
+        self.pulse_enable(timer, i2c);
 
-        self.d[4].set_high().unwrap();
-
+        // Lower-order data bits write
+        self.reset_pins(timer, i2c);
         // Left == low, Right == high
         if dir == Direction::Right {
-            self.d[2].set_high().unwrap();
+            rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6, i2c);
         }
-
         self.pulse_enable(timer, i2c);
     }
 
-    //FIXME: Update to I2C
     fn newline<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-        self.reset_pins(i2c);
-
-        self.d[7].set_high().unwrap();
-        self.d[6].set_high().unwrap();
-
+        // Higher-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6 | MASK_D7, i2c);
         self.pulse_enable(timer, i2c);
-    }
 
-    #[allow(dead_code)]
-    pub fn print_state(&self) {
-        rprintln!(
-            "rs rw d7 d6 d5 d4 d3 d2 d1 d0 en\n{}  {}  {}  {}  {}  {}  {}  {}  {}  {}  {}",
-            self.rs.is_set_high().unwrap() as u32,
-            self.rw.is_set_high().unwrap() as u32,
-            self.d[7].is_set_high().unwrap() as u32,
-            self.d[6].is_set_high().unwrap() as u32,
-            self.d[5].is_set_high().unwrap() as u32,
-            self.d[4].is_set_high().unwrap() as u32,
-            self.d[3].is_set_high().unwrap() as u32,
-            self.d[2].is_set_high().unwrap() as u32,
-            self.d[1].is_set_high().unwrap() as u32,
-            self.d[0].is_set_high().unwrap() as u32,
-            self.en.is_set_high().unwrap() as u32,
-        );
+        // Lower-order data bits write
+        self.reset_pins(timer, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_NONE, i2c);
+        self.pulse_enable(timer, i2c);
     }
 }
 
@@ -327,7 +531,7 @@ fn rmw_mask_val_set<U: twim::Instance>(reg_addr: MCP23008Register, mask_val: u8,
     i2c.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
 }
 
-fn rmw_mask_val_unset<U: twim::Instance>(reg_addr: MCP23008Register, mask_val: u8, i2c: &mut Twim<U>) {
+fn rmw_mask_val_unset<T: timer::Instance, U: twim::Instance>(reg_addr: MCP23008Register, mask_val: u8, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // Read value current in specified register
     let mut rd_buffer: [u8;1] = [0x00];
     i2c.write_then_read(I2C_ADDR_LCD, &[reg_addr as u8], &mut rd_buffer).unwrap();

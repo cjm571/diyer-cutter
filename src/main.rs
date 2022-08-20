@@ -34,6 +34,7 @@ use rtic::app;
 
 mod i2c_periphs;
 use crate::i2c_periphs::{I2C_ADDR_LCD, MCP23008Register};
+use crate::i2c_periphs::lcd1602::{Lcd1602, LcdInputPins};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -55,7 +56,7 @@ mod app {
     struct Shared {
         timer0: Timer<TIMER0>,
         i2c0: Twim<TWIM0>,
-        i2c_verf_pins: [Pin<Input<PullDown>>; 8],
+        // i2c_verf_pins: [Pin<Input<PullDown>>; 8],
     }
 
     #[local]
@@ -75,6 +76,10 @@ mod app {
         // Take ownership of the full board
         let board = Board::new(cx.device, cx.core);
 
+        // Hold various chips in reset/output-disabled
+        let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::Low); // P16
+        let mut lcd_lvshift_oe_pin = board.pins.p0_13.into_push_pull_output(Level::High); //P15
+
         // Instantiate a timer
         let timer0 = Timer::new(board.TIMER0);
 
@@ -82,32 +87,42 @@ mod app {
         let mut timer1 = init_1s_timer(board.TIMER1);
 
         // Initialize the TWIM0 (I2C) device
-        let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::High); // P16
-        let i2c0 = init_i2c(
+        let mut i2c0 = init_i2c(
             board.TWIM0,
             board.i2c_external,
             &mut i2c_reset_pin.degrade(),
-            &mut timer1,
         );
 
         // Create an array of GPIO pins for checking I2C chip
         let i2c_verf_pins: [Pin<Input<PullDown>>; 8] = [
-            board.pins.p0_02.into_pulldown_input().degrade(), // P0
-            board.pins.p0_03.into_pulldown_input().degrade(), // P1
-            board.pins.p0_04.into_pulldown_input().degrade(), // P2
-            board.display_pins.col3.into_pulldown_input().degrade(), // P3
-            board.display_pins.col1.into_pulldown_input().degrade(), // P4
-            board.display_pins.col4.into_pulldown_input().degrade(), // P6
-            board.display_pins.col2.into_pulldown_input().degrade(), // P7
             board.pins.p0_10.into_pulldown_input().degrade(), // P8
+            board.display_pins.col2.into_pulldown_input().degrade(), // P7 "D7"
+            board.display_pins.col4.into_pulldown_input().degrade(), // P6 "D6"
+            board.display_pins.col1.into_pulldown_input().degrade(), // P4 "D5"
+            board.display_pins.col3.into_pulldown_input().degrade(), // P3 "D4"
+            board.pins.p0_04.into_pulldown_input().degrade(), // P2 "RS"
+            board.pins.p0_03.into_pulldown_input().degrade(), // P1 "RW"
+            board.pins.p0_02.into_pulldown_input().degrade(), // P0 "E"
         ];
+
+        // Enable output on LCD level shifter
+        rprintln!("Enabling output on Level Shifter!");
+        lcd_lvshift_oe_pin.set_low().unwrap();
+
+
+        // Initialize LCD Display and display greeting
+        let lcd_input_pins = LcdInputPins::new(i2c_verf_pins);
+        let mut lcd = Lcd1602::new(lcd_input_pins);
+        lcd.initialize_4b_1l(&mut timer1, &mut i2c0);
+        // timer1.delay_ms(1000_u32);
+        // lcd.write_string("HI", &mut timer1, &mut i2c0);
 
 
         (
             Shared {
                 timer0,
                 i2c0,
-                i2c_verf_pins,
+                // i2c_verf_pins,
             },
             Local { timer1 },
             init::Monotonics(),
@@ -115,62 +130,20 @@ mod app {
     }
 
 
-    #[idle(shared = [timer0, i2c0, &i2c_verf_pins])]
+    #[idle(shared = [timer0, i2c0/*, &i2c_verf_pins*/])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
-
-        rprintln!(
-            "Initial I2C Verf: 0b{}{}{}{}{}{}{}{}",
-            cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
-            cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
-        );
-
-        // Write some MCP23008 Registers to verify I2C functionality
-        cx.shared.i2c0.lock(|i2c0| {
-            let reg_addr: [u8; 1] = [MCP23008Register::GPIO as u8];
-            let mut rd_buffer: [u8; 1] = [0x00];
-            i2c0.write_then_read(I2C_ADDR_LCD, &reg_addr, &mut rd_buffer)
-                .unwrap();
-            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
-
-            let reg_addr_and_wr_buffer: [u8; 2] = [MCP23008Register::GPIO as u8, 0b10101010];
-            i2c0.write(I2C_ADDR_LCD, &reg_addr_and_wr_buffer).unwrap();
-
-            rd_buffer = [0x00];
-            i2c0.write_then_read(I2C_ADDR_LCD, &reg_addr, &mut rd_buffer)
-                .unwrap();
-            rprintln!("GPIO: {:0>8b}", rd_buffer[0]);
-        });
-
 
         // let mut count = 0;
         loop {
             cx.shared.timer0.lock(|timer0| {
                 timer0.delay_ms(100_u32);
             });
-
-            rprintln!(
-                "I2C Verf: 0b{}{}{}{}{}{}{}{}",
-                cx.shared.i2c_verf_pins[7].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[6].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[5].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[4].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[3].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[2].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[1].is_high().unwrap() as u8,
-                cx.shared.i2c_verf_pins[0].is_high().unwrap() as u8,
-            );
         }
     }
 
 
-    #[task(binds = TIMER1, shared = [&i2c_verf_pins], local = [timer1])]
+    #[task(binds = TIMER1, /*shared = [&i2c_verf_pins],*/ local = [timer1])]
     fn timer1(cx: timer1::Context) {
         // Clear the timer interrupt flag
         cx.local
@@ -215,18 +188,15 @@ mod app {
         timer_device
     }
 
-    fn init_i2c<T: twim::Instance, U: timer::Instance>(
+    fn init_i2c<T: twim::Instance>(
         instance: T,
         i2c_pins: I2CExternalPins,
         reset_pin: &mut Pin<Output<PushPull>>,
-        timer_device: &mut Timer<U>,
     ) -> Twim<T> {
         // Create the TWIM object
         let mut i2c_device = Twim::new(instance, twim::Pins::from(i2c_pins), FREQUENCY_A::K100);
 
-        // Reset all I2C chips via I2C Reset Pin
-        reset_pin.set_low().unwrap();
-        timer_device.delay_us(1_u32);
+        // Pull all I2C devices out of reset
         reset_pin.set_high().unwrap();
 
         // Set all pins on LCD Display's MCP23008 to Output mode
