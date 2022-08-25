@@ -78,10 +78,10 @@ mod app {
 
         // Hold various chips in reset/output-disabled
         let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::Low); // P16
-        let mut lcd_lvshift_oe_pin = board.pins.p0_13.into_push_pull_output(Level::High); //P15
+        let mut lcd_pwr_switch_pin = board.pins.p0_13.into_push_pull_output(Level::Low); //P15
 
         // Instantiate a timer
-        let timer0 = Timer::new(board.TIMER0);
+        let timer0 = init_1s_timer(board.TIMER0);
 
         // Initialize a 1-second timer
         let mut timer1 = init_1s_timer(board.TIMER1);
@@ -100,22 +100,20 @@ mod app {
             board.display_pins.col4.into_pulldown_input().degrade(), // P6 "D6"
             board.display_pins.col1.into_pulldown_input().degrade(), // P4 "D5"
             board.display_pins.col3.into_pulldown_input().degrade(), // P3 "D4"
-            board.pins.p0_04.into_pulldown_input().degrade(), // P2 "RS"
+            board.pins.p0_02.into_pulldown_input().degrade(), // P2 "E"
             board.pins.p0_03.into_pulldown_input().degrade(), // P1 "RW"
-            board.pins.p0_02.into_pulldown_input().degrade(), // P0 "E"
+            board.pins.p0_04.into_pulldown_input().degrade(), // P0 "RS"
         ];
-
-        // Enable output on LCD level shifter
-        rprintln!("Enabling output on Level Shifter!");
-        lcd_lvshift_oe_pin.set_low().unwrap();
-
 
         // Initialize LCD Display and display greeting
         let lcd_input_pins = LcdInputPins::new(i2c_verf_pins);
-        let mut lcd = Lcd1602::new(lcd_input_pins);
+        let mut lcd = Lcd1602::new(lcd_input_pins);       
+
+        rprintln!("Enabling power to LCD Display...");
+        lcd_pwr_switch_pin.set_high().unwrap();
+
         lcd.initialize_4b_1l(&mut timer1, &mut i2c0);
-        // timer1.delay_ms(1000_u32);
-        // lcd.write_string("HI", &mut timer1, &mut i2c0);
+        lcd.display_greeting(&mut timer1, &mut i2c0);
 
 
         (

@@ -33,9 +33,9 @@ const LCD_MAX_LINE_LENGTH: usize = 16;
 const LCD_MAX_NEWLINES: usize = 1;
 const ASCII_INT_OFFSET: usize = 48;
 
-const MASK_EN: u8 = 0b00000001;
+const MASK_RS: u8 = 0b00000001;
 const MASK_RW: u8 = 0b00000010;
-const MASK_RS: u8 = 0b00000100;
+const MASK_EN: u8 = 0b00000100;
 const MASK_D4: u8 = 0b00001000;
 const MASK_D5: u8 = 0b00010000;
 const MASK_D6: u8 = 0b00100000;
@@ -116,12 +116,21 @@ impl Lcd1602 {
         self.input_pins.set_4bit_op(timer, i2c);
         self.input_pins.set_1line_mode(timer, i2c);
 
+        // // 3. Set 4-bit operation (again) and selects 1-line display
+        // rprintln!("Manually Resetting...");
+        // self.input_pins.manual_reset(timer, i2c);
+
         // 4. Turn on display/cursor
         rprintln!("Turning on LCD Display and Cursor...");
         self.input_pins.set_cursor(timer, i2c);
 
+        // 5. Entry mode set
+        rprintln!("Setting entry mode to INCR, no SHIFT...");
+        self.input_pins.set_autoincrement(timer, i2c);
+
+
         //FIXME: DEBUG DELETE
-        rprintln!("LCD Initilization Complete");
+        rprintln!("LCD Initialization Complete");
     }
 
     //TODO: Fix this weird straddled architecture
@@ -294,12 +303,11 @@ impl LcdInputPins {
             );
         }
         
-        // Delay before setting Enable high to ensure that Address Settling time (60ns) is not violated
-        timer.delay_us(1000_u32);
+        // Delay before setting EN high to ensure that Address Set-Up time (tAS, 40ms) is not violated
+        timer.delay_us(40_u32);
 
         // Set EN high
         rmw_mask_val_set(MCP23008Register::GPIO, MASK_EN, i2c);
-        
         #[cfg(feature = "debug_pulse_en")]
         {
             rprintln!(
@@ -315,9 +323,8 @@ impl LcdInputPins {
             );
         }
 
-        // Enable must be held high for at least 500ns (at 3.3V operation) per HD44780U datasheet
-        // However, in practice holding for just 500us was unstable, so hold for 1000us
-        timer.delay_us(1000_u32);
+        // Hold EN high for the required time from the datasheet (PWEH, 230ms)
+        timer.delay_us(230_u32);
 
         // Set EN low
         rmw_mask_val_unset(MCP23008Register::GPIO, MASK_EN, timer, i2c);
@@ -336,8 +343,8 @@ impl LcdInputPins {
             );
         }
 
-        // Delay another 1us to ensure Enable Cycle Time minimum (1000ns) is not violated
-        timer.delay_us(1000_u32);
+        // Delay before allowing other operations (remainder of tcycE, 270ms)
+        timer.delay_us(270_u32);
     }
 
     pub fn reset_pins<T: timer::Instance, U: twim::Instance>(&mut self, timer: &mut Timer<T>, i2c: &mut Twim<U>) {
@@ -436,7 +443,7 @@ impl LcdInputPins {
 
         // Lower-order data bits write
         self.reset_pins(timer, i2c);
-        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D6 | MASK_D7, i2c);
+        rmw_mask_val_set(MCP23008Register::GPIO, MASK_D5 | MASK_D6, i2c);
         self.pulse_enable(timer, i2c);
     }
 
