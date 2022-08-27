@@ -20,7 +20,7 @@ Copyright (C) 2022 CJ McAllister
 use microbit::{
     board::{Board, I2CExternalPins},
     hal::{
-        gpio::{Input, Level, Output, Pin, PullDown, PushPull},
+        gpio::{Level, Output, Pin, PushPull},
         pac::{twim0::frequency::FREQUENCY_A, Interrupt, NVIC, TWIM0},
         prelude::*,
         timer, twim, Timer, Twim,
@@ -33,8 +33,8 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c_periphs;
-use crate::i2c_periphs::{I2C_ADDR_LCD, MCP23008Register};
-use crate::i2c_periphs::lcd1602::{Lcd1602, LcdInputPins};
+use crate::i2c_periphs::lcd1602;
+use crate::i2c_periphs::{MCP23008Register, I2C_ADDR_LCD};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -56,7 +56,6 @@ mod app {
     struct Shared {
         timer0: Timer<TIMER0>,
         i2c0: Twim<TWIM0>,
-        // i2c_verf_pins: [Pin<Input<PullDown>>; 8],
     }
 
     #[local]
@@ -64,7 +63,7 @@ mod app {
         timer1: Timer<TIMER1>,
     }
 
-    
+
     ///////////////////////////////////////////////////////////////////////////////
     //  RTIC Tasks
     ///////////////////////////////////////////////////////////////////////////////
@@ -93,35 +92,17 @@ mod app {
             &mut i2c_reset_pin.degrade(),
         );
 
-        // Create an array of GPIO pins for checking I2C chip
-        let i2c_verf_pins: [Pin<Input<PullDown>>; 8] = [
-            board.pins.p0_10.into_pulldown_input().degrade(), // P8
-            board.display_pins.col2.into_pulldown_input().degrade(), // P7 "D7"
-            board.display_pins.col4.into_pulldown_input().degrade(), // P6 "D6"
-            board.display_pins.col1.into_pulldown_input().degrade(), // P4 "D5"
-            board.display_pins.col3.into_pulldown_input().degrade(), // P3 "D4"
-            board.pins.p0_02.into_pulldown_input().degrade(), // P2 "E"
-            board.pins.p0_03.into_pulldown_input().degrade(), // P1 "RW"
-            board.pins.p0_04.into_pulldown_input().degrade(), // P0 "RS"
-        ];
-
         // Initialize LCD Display and display greeting
-        let lcd_input_pins = LcdInputPins::new(i2c_verf_pins);
-        let mut lcd = Lcd1602::new(lcd_input_pins);       
-
         rprintln!("Enabling power to LCD Display...");
         lcd_pwr_switch_pin.set_high().unwrap();
 
-        lcd.initialize_4b_1l(&mut timer1, &mut i2c0);
-        lcd.display_greeting(&mut timer1, &mut i2c0);
+        rprintln!("Initializing LCD Display...");
+        lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);
+        lcd1602::display_greeting(&mut timer1, &mut i2c0);
 
 
         (
-            Shared {
-                timer0,
-                i2c0,
-                // i2c_verf_pins,
-            },
+            Shared { timer0, i2c0 },
             Local { timer1 },
             init::Monotonics(),
         )
@@ -199,9 +180,7 @@ mod app {
 
         // Set all pins on LCD Display's MCP23008 to Output mode
         let reg_addr_and_data: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
-        i2c_device
-            .write(I2C_ADDR_LCD, &reg_addr_and_data)
-            .unwrap();
+        i2c_device.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
 
         i2c_device
     }
