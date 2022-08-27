@@ -77,7 +77,6 @@ mod app {
 
         // Hold various chips in reset/output-disabled
         let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::Low); // P16
-        let mut lcd_pwr_switch_pin = board.pins.p0_13.into_push_pull_output(Level::Low); //P15
 
         // Instantiate a timer
         let timer0 = init_1s_timer(board.TIMER0);
@@ -99,7 +98,6 @@ mod app {
         rprintln!("Initializing LCD Display...");
         lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);
         lcd1602::display_greeting(&mut timer1, &mut i2c0);
-
 
         (
             Shared { timer0, i2c0 },
