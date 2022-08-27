@@ -94,7 +94,7 @@ mod app {
 
         // Initialize LCD Display and display greeting
         rprintln!("Enabling power to LCD Display...");
-        lcd_pwr_switch_pin.set_high().unwrap();
+        lcd1602::power_on(&mut i2c0);
 
         rprintln!("Initializing LCD Display...");
         lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);

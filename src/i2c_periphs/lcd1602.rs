@@ -38,6 +38,7 @@ const MASK_D6: u8 = 0b00100000;
 const MASK_D7: u8 = 0b01000000;
 const MASK_ALL: u8 = 0b01111111;
 const MASK_NONE: u8 = 0b00000000;
+const MASK_PWR: u8 = 0b10000000;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -55,6 +56,15 @@ enum Direction {
 ///////////////////////////////////////////////////////////////////////////////
 //  Static Functions
 ///////////////////////////////////////////////////////////////////////////////
+
+pub fn power_on<U: twim::Instance>(i2c: &mut Twim<U>) {
+    rmw_mask_val_set(MCP23008Register::GPIO, MASK_PWR, i2c);
+}
+
+#[allow(dead_code)]
+pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
+    rmw_mask_val_unset(MCP23008Register::GPIO, MASK_PWR, i2c);
+}
 
 pub fn initialize_4b_1l<T: timer::Instance, U: twim::Instance>(
     timer: &mut Timer<T>,
