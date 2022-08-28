@@ -40,6 +40,8 @@ const MASK_ALL: u8 = 0b01111111;
 const MASK_NONE: u8 = 0b00000000;
 const MASK_PWR: u8 = 0b10000000;
 
+const EN_PULSE_WIDTH: u32 = 500;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Data Structures
@@ -56,6 +58,15 @@ enum Direction {
 ///////////////////////////////////////////////////////////////////////////////
 //  Static Functions
 ///////////////////////////////////////////////////////////////////////////////
+
+//FIXME: DEBUG DELETE
+pub fn all_on<U: twim::Instance>(i2c: &mut Twim<U>) {
+    rmw_mask_val_set(MCP23008Register::GPIO, MASK_PWR | MASK_ALL, i2c);
+}
+pub fn all_off<U: twim::Instance>(i2c: &mut Twim<U>) {
+    rmw_mask_val_unset(MCP23008Register::GPIO, MASK_PWR | MASK_ALL, i2c);
+}
+
 
 pub fn power_on<U: twim::Instance>(i2c: &mut Twim<U>) {
     rmw_mask_val_set(MCP23008Register::GPIO, MASK_PWR, i2c);
@@ -78,10 +89,15 @@ pub fn initialize_4b_1l<T: timer::Instance, U: twim::Instance>(
     rprintln!("Setting LCD up for 4bit Operation...");
     set_4bit_op(timer, i2c);
 
-    // 3. Set 4-bit operation (again) and selects 1-line display
-    rprintln!("Setting LCD up for 1-Line Mode...");
+    // // 3. Set 4-bit operation (again) and selects 1-line display
+    // rprintln!("Setting LCD up for 1-Line Mode...");
+    // set_4bit_op(timer, i2c);
+    // set_1line_mode(timer, i2c);
+    
+    // 3. Set 4-bit operation (again) and selects 2-line display
+    rprintln!("Setting LCD up for 2-Line Mode...");
     set_4bit_op(timer, i2c);
-    set_1line_mode(timer, i2c);
+    set_2line_mode(timer, i2c);
 
     // 4. Turn on display/cursor
     rprintln!("Turning on LCD Display and Cursor...");
