@@ -70,27 +70,14 @@ pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
     rmw_mask_val_unset(MASK_PWR, i2c);
 }
 
-pub fn initialize_4b_1l<T: timer::Instance, U: twim::Instance>(
-    timer: &mut Timer<T>,
-    i2c: &mut Twim<U>,
-) {
-    // 1. Allow time for LCD VCC to rist to 4.5V
+pub fn initialize<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+    // 1. Allow time for LCD VCC to rise to 4.5V
     rprintln!("Giving LCD time to initialize...");
     timer.delay_ms(1000_u32);
 
-    // 2. Set up LCD for 4-bit operation
-    rprintln!("Setting LCD up for 4bit Operation...");
-    set_4bit_op(timer, i2c);
-
-    // // 3. Set 4-bit operation (again) and selects 1-line display
-    // rprintln!("Setting LCD up for 1-Line Mode...");
-    // set_4bit_op(timer, i2c);
-    // set_1line_mode(timer, i2c);
-
-    // 3. Set 4-bit operation (again) and selects 2-line display
-    rprintln!("Setting LCD up for 2-Line Mode...");
-    set_4bit_op(timer, i2c);
-    set_2line_mode(timer, i2c);
+    // 2, 3. Set up LCD for 4-bit operation, 2-line Mode
+    rprintln!("Setting LCD up for 4bit Operation, 2-Line Mode...");
+    set_4bit_2line_mode(timer, i2c);
 
     // 4. Turn on display/cursor
     rprintln!("Turning on LCD Display and Cursor...");
@@ -224,31 +211,6 @@ pub fn clear_display<T: timer::Instance, U: twim::Instance>(
     pulse_enable(timer, i2c);
 }
 
-pub fn set_4bit_op<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-    reset_pins(i2c);
-    rmw_mask_val_set(MASK_D5, i2c);
-    pulse_enable(timer, i2c);
-}
-
-pub fn set_1line_mode<T: timer::Instance, U: twim::Instance>(
-    timer: &mut Timer<T>,
-    i2c: &mut Twim<U>,
-) {
-    reset_pins(i2c);
-    pulse_enable(timer, i2c);
-}
-
-#[allow(dead_code)]
-pub fn set_2line_mode<T: timer::Instance, U: twim::Instance>(
-    timer: &mut Timer<T>,
-    i2c: &mut Twim<U>,
-) {
-    reset_pins(i2c);
-    rmw_mask_val_set(MASK_D7, i2c);
-    pulse_enable(timer, i2c);
-}
-
-#[allow(dead_code)]
 pub fn set_4bit_2line_mode<T: timer::Instance, U: twim::Instance>(
     timer: &mut Timer<T>,
     i2c: &mut Twim<U>,

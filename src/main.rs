@@ -100,7 +100,7 @@ mod app {
         lcd_lvshift_oe_pin.set_low().unwrap();
 
         rprintln!("Initializing LCD Display...");
-        lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);
+        lcd1602::initialize(&mut timer1, &mut i2c0);
         lcd1602::display_greeting(&mut timer1, &mut i2c0);
 
         (
