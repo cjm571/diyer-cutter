@@ -137,7 +137,7 @@ pub fn write_u8<T: timer::Instance, U: twim::Instance>(
     }
 }
 
-//OPT: Implement an "overwrite" option for writing
+//FEAT: Implement an "overwrite" option for writing
 pub fn write_string<T: timer::Instance, U: twim::Instance>(
     out_str: &str,
     timer: &mut Timer<T>,
