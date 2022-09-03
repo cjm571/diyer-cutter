@@ -42,7 +42,19 @@ const MASK_ALL: u8 = 0b01111111;
 const MASK_NONE: u8 = 0b00000000;
 const MASK_PWR: u8 = 0b10000000;
 
-const EN_PULSE_WIDTH: u32 = 500;
+
+/*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *\
+ *   5V Bus Timing Characteristics, per HD44789U datasheet   *
+\*  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  */
+
+// Power supply rise time
+const T_RCC_IN_MS: u32 = 10;
+// Address set-up time (RS, R/W to E)
+const T_AS_IN_US: u32 = 40;
+// Enable pulse width (high level)
+const PW_EH_IN_US: u32 = 230;
+// Enable cycle time
+const T_CYCE_IN_US: u32 = 500;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,7 +85,7 @@ pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
 pub fn initialize<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // 1. Allow time for LCD VCC to rise to 4.5V
     rprintln!("Giving LCD time to initialize...");
-    timer.delay_ms(10_u32);
+    timer.delay_ms(T_RCC_IN_MS);
 
     // 2, 3. Set up LCD for 4-bit operation, 2-line Mode
     rprintln!("Setting LCD up for 4bit Operation, 2-Line Mode...");
@@ -175,20 +187,20 @@ pub fn backspace<T: timer::Instance, U: twim::Instance>(
 }
 
 fn pulse_enable<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
-    // Delay before setting EN high to ensure that Address Set-Up time (tAS, 40ms) is not violated
-    timer.delay_us(40_u32);
+    // Delay before setting EN high to ensure that Address Set-Up time is not violated
+    timer.delay_us(T_AS_IN_US);
 
     // Set EN high
     rmw_mask_val_set(MASK_EN, i2c);
 
-    // Hold EN high for the required time from the datasheet (PWEH, 230ms)
-    timer.delay_us(230_u32);
+    // Hold EN high for the required time
+    timer.delay_us(PW_EH_IN_US);
 
     // Set EN low
     rmw_mask_val_unset(MASK_EN, i2c);
 
-    // Delay before allowing other operations (remainder of tcycE, 270ms)
-    timer.delay_us(270_u32);
+    // Delay before allowing other operations to ensure Enable cycle time is not violated
+    timer.delay_us(T_CYCE_IN_US - PW_EH_IN_US);
 }
 
 pub fn reset_pins<U: twim::Instance>(i2c: &mut Twim<U>) {
@@ -267,38 +279,24 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
     // Get the ASCII index of the character
     let ascii_idx = c as u32;
 
-    // Check each higher-order bit's value and set in the corresponding data bit pin
-    //TODO: This can very likely be optimized by using the shifted value directly
-    if ascii_idx & (1 << 4) != 0 {
-        rmw_mask_val_set(MASK_D4, i2c);
-    }
-    if ascii_idx & (1 << 5) != 0 {
-        rmw_mask_val_set(MASK_D5, i2c);
-    }
-    if ascii_idx & (1 << 6) != 0 {
-        rmw_mask_val_set(MASK_D6, i2c);
-    }
-    if ascii_idx & (1 << 7) != 0 {
-        rmw_mask_val_set(MASK_D7, i2c);
-    }
+    // Calculate higher-order bit mask based on ascii index value, set pins accordingly and pulse enable
+    let hi_order_mask = ((ascii_idx & (1 << 4)
+        | ascii_idx & (1 << 5)
+        | ascii_idx & (1 << 6)
+        | ascii_idx & (1 << 7))
+        >> 1) as u8;
+    rmw_mask_val_set(hi_order_mask, i2c);
     pulse_enable(timer, i2c);
 
-    // Check each lower-order bit's value and set in the corresponding data bit pin
+    // Calculate lower-order bit mask based on ascii index value, set pins accordingly and pulse enable
     reset_pins(i2c);
     rmw_mask_val_set(MASK_RS, i2c);
-    //TODO: This can very likely be optimized by using the shifted value directly
-    if ascii_idx & (1 << 0) != 0 {
-        rmw_mask_val_set(MASK_D4, i2c);
-    }
-    if ascii_idx & (1 << 1) != 0 {
-        rmw_mask_val_set(MASK_D5, i2c);
-    }
-    if ascii_idx & (1 << 2) != 0 {
-        rmw_mask_val_set(MASK_D6, i2c);
-    }
-    if ascii_idx & (1 << 3) != 0 {
-        rmw_mask_val_set(MASK_D7, i2c);
-    }
+    let lo_order_mask = ((ascii_idx & (1 << 0)
+        | ascii_idx & (1 << 1)
+        | ascii_idx & (1 << 2)
+        | ascii_idx & (1 << 3))
+        << 3) as u8;
+    rmw_mask_val_set(lo_order_mask, i2c);
     pulse_enable(timer, i2c);
 }
 
