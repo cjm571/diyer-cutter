@@ -73,7 +73,7 @@ pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
 pub fn initialize<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // 1. Allow time for LCD VCC to rise to 4.5V
     rprintln!("Giving LCD time to initialize...");
-    timer.delay_ms(1000_u32);
+    timer.delay_ms(10_u32);
 
     // 2, 3. Set up LCD for 4-bit operation, 2-line Mode
     rprintln!("Setting LCD up for 4bit Operation, 2-Line Mode...");
