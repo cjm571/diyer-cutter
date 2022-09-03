@@ -101,8 +101,7 @@ mod app {
 
         rprintln!("Initializing LCD Display...");
         lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);
-        // lcd1602::display_greeting(&mut timer1, &mut i2c0);
-        lcd1602::write_string("0123456789012345\nABCDEFGHIJKLMNOP", &mut timer1, &mut i2c0);
+        lcd1602::display_greeting(&mut timer1, &mut i2c0);
 
         (
             Shared { timer0, i2c0 },
@@ -116,23 +115,10 @@ mod app {
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
 
-        let mut all_on = false;
         loop {
             cx.shared.timer0.lock(|timer0| {
                 timer0.delay_ms(500_u32);
             });
-
-            //FIXME: DEBUG DELETE
-            // cx.shared.i2c0.lock(|i2c0| {
-            //     if all_on {
-            //         lcd1602::all_off(i2c0);
-            //         all_on = false;
-            //     }
-            //     else {
-            //         lcd1602::all_on(i2c0);
-            //         all_on = true;
-            //     }
-            // })
         }
     }
 
