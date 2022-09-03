@@ -16,7 +16,7 @@ Copyright (C) 2022 CJ McAllister
 use microbit::hal::{prelude::*, timer, twim, Timer, Twim};
 use rtt_target::rprintln;
 
-use super::{MCP23008Register, I2C_ADDR_LCD};
+use super::*;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -27,8 +27,6 @@ const LCD_MAX_LINE_LENGTH: usize = 16;
 const LCD_MAX_NEWLINES: usize = 1;
 #[allow(dead_code)]
 const ASCII_INT_OFFSET: usize = 48;
-
-const GPIO_REG_ADDR: u8 = MCP23008Register::GPIO as u8;
 
 const MASK_RS: u8 = 0b00000001;
 #[allow(dead_code)]
@@ -74,12 +72,12 @@ enum Direction {
 ///////////////////////////////////////////////////////////////////////////////
 
 pub fn power_on<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_set(MASK_PWR, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_PWR, i2c);
 }
 
 #[allow(dead_code)]
 pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_unset(MASK_PWR, i2c);
+    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_PWR, i2c);
 }
 
 pub fn initialize<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
@@ -191,20 +189,20 @@ fn pulse_enable<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c
     timer.delay_us(T_AS_IN_US);
 
     // Set EN high
-    rmw_mask_val_set(MASK_EN, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_EN, i2c);
 
     // Hold EN high for the required time
     timer.delay_us(PW_EH_IN_US);
 
     // Set EN low
-    rmw_mask_val_unset(MASK_EN, i2c);
+    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_EN, i2c);
 
     // Delay before allowing other operations to ensure Enable cycle time is not violated
     timer.delay_us(T_CYCE_IN_US - PW_EH_IN_US);
 }
 
 pub fn reset_pins<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_unset(MASK_ALL, i2c);
+    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_ALL, i2c);
 }
 
 #[allow(dead_code)]
@@ -214,12 +212,12 @@ pub fn clear_display<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_NONE, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D4, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D4, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -229,27 +227,27 @@ pub fn set_4bit_2line_mode<T: timer::Instance, U: twim::Instance>(
 ) {
     // First phase of Function Set command - sets 4-bit operation mode (just one write, unlike most others)
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D5, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5, i2c);
     pulse_enable(timer, i2c);
 
     // Second phase of Function Set command - sets 4-bit, 2-line mode
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D5, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5, i2c);
     pulse_enable(timer, i2c);
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D7, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D7, i2c);
     pulse_enable(timer, i2c);
 }
 
 pub fn set_cursor<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_NONE, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D5 | MASK_D6 | MASK_D7, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5 | MASK_D6 | MASK_D7, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -259,12 +257,12 @@ pub fn set_autoincrement<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_NONE, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D5 | MASK_D6, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5 | MASK_D6, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -274,7 +272,7 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
     i2c: &mut Twim<U>,
 ) {
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_RS, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_RS, i2c);
 
     // Get the ASCII index of the character
     let ascii_idx = c as u32;
@@ -285,18 +283,18 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
         | ascii_idx & (1 << 6)
         | ascii_idx & (1 << 7))
         >> 1) as u8;
-    rmw_mask_val_set(hi_order_mask, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, hi_order_mask, i2c);
     pulse_enable(timer, i2c);
 
     // Calculate lower-order bit mask based on ascii index value, set pins accordingly and pulse enable
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_RS, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_RS, i2c);
     let lo_order_mask = ((ascii_idx & (1 << 0)
         | ascii_idx & (1 << 1)
         | ascii_idx & (1 << 2)
         | ascii_idx & (1 << 3))
         << 3) as u8;
-    rmw_mask_val_set(lo_order_mask, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, lo_order_mask, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -307,14 +305,14 @@ fn shift_cursor<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D4, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D4, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
     // Left == low, Right == high
     if dir == Direction::Right {
-        rmw_mask_val_set(MASK_D6, i2c);
+        rmw_mask_val_set(I2C_ADDR_LCD, MASK_D6, i2c);
     }
     pulse_enable(timer, i2c);
 }
@@ -322,50 +320,11 @@ fn shift_cursor<T: timer::Instance, U: twim::Instance>(
 fn newline<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_D6 | MASK_D7, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D6 | MASK_D7, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(MASK_NONE, i2c);
+    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
-//  Helper Functions
-///////////////////////////////////////////////////////////////////////////////
-
-fn rmw_mask_val_set<U: twim::Instance>(mask_val: u8, i2c: &mut Twim<U>) {
-    // Must declare this locally or the I2C driver will panic
-    let gpio_reg_addr = GPIO_REG_ADDR;
-
-    // Read value current in specified register
-    let mut rd_buffer: [u8; 1] = [0x00];
-    i2c.write_then_read(I2C_ADDR_LCD, &[gpio_reg_addr], &mut rd_buffer)
-        .unwrap();
-
-    // Modify the read value with mask
-    let modified_data = rd_buffer[0] | mask_val;
-
-    // Write the modified value back
-    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
-    i2c.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
-}
-
-fn rmw_mask_val_unset<U: twim::Instance>(mask_val: u8, i2c: &mut Twim<U>) {
-    // Must declare this locally or the I2C driver will panic
-    let gpio_reg_addr = GPIO_REG_ADDR;
-
-    // Read value current in specified register
-    let mut rd_buffer: [u8; 1] = [0x00];
-    i2c.write_then_read(I2C_ADDR_LCD, &[gpio_reg_addr], &mut rd_buffer)
-        .unwrap();
-
-    // Modify the read value with mask
-    let modified_data = rd_buffer[0] & !mask_val;
-
-    // Write the modified value back
-    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
-    i2c.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
 }

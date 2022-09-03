@@ -18,6 +18,16 @@ Copyright (C) 2022 CJ McAllister
 //  Module Declarations
 ///////////////////////////////////////////////////////////////////////////////
 
+use microbit::{
+    board::I2CExternalPins,
+    hal::{
+        gpio::{Output, Pin, PushPull},
+        prelude::*,
+        twim, Twim,
+    },
+    pac::twim0::frequency::FREQUENCY_A,
+};
+
 pub mod lcd1602;
 
 
@@ -26,6 +36,9 @@ pub mod lcd1602;
 ///////////////////////////////////////////////////////////////////////////////
 
 pub const I2C_ADDR_LCD: u8 = 0b0100000;
+pub const I2C_ADDR_KEYPAD: u8 = 0b0100001;
+
+const GPIO_REG_ADDR: u8 = MCP23008Register::GPIO as u8;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -46,4 +59,63 @@ pub enum MCP23008Register {
     INTCAP = 0x08,
     GPIO = 0x09,
     OLAT = 0x0A,
+}
+
+/////////////////////////////////////////////////////////////////////////////
+//  Helper Functions
+///////////////////////////////////////////////////////////////////////////////
+
+pub fn init_i2c<T: twim::Instance>(
+    instance: T,
+    i2c_pins: I2CExternalPins,
+    reset_pin: &mut Pin<Output<PushPull>>,
+) -> Twim<T> {
+    // Create the TWIM object
+    let mut i2c_device = Twim::new(instance, twim::Pins::from(i2c_pins), FREQUENCY_A::K100);
+
+    // Pull all I2C devices out of reset
+    reset_pin.set_high().unwrap();
+
+    // Set all pins on LCD Display's MCP23008 to Output mode
+    let reg_addr_and_data: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
+    i2c_device.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
+    
+    // Set all pins on keypad's MCP23008 to Output mode
+    i2c_device.write(I2C_ADDR_KEYPAD, &reg_addr_and_data).unwrap();
+
+    i2c_device
+}
+
+pub fn rmw_mask_val_set<U: twim::Instance>(i2c_addr: u8, mask_val: u8, i2c: &mut Twim<U>) {
+    // Must declare this locally or the I2C driver will panic
+    let gpio_reg_addr = GPIO_REG_ADDR;
+
+    // Read value current in specified register
+    let mut rd_buffer: [u8; 1] = [0x00];
+    i2c.write_then_read(i2c_addr, &[gpio_reg_addr], &mut rd_buffer)
+        .unwrap();
+
+    // Modify the read value with mask
+    let modified_data = rd_buffer[0] | mask_val;
+
+    // Write the modified value back
+    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
+    i2c.write(i2c_addr, &reg_addr_and_data).unwrap();
+}
+
+pub fn rmw_mask_val_unset<U: twim::Instance>(i2c_addr: u8, mask_val: u8, i2c: &mut Twim<U>) {
+    // Must declare this locally or the I2C driver will panic
+    let gpio_reg_addr = GPIO_REG_ADDR;
+
+    // Read value current in specified register
+    let mut rd_buffer: [u8; 1] = [0x00];
+    i2c.write_then_read(i2c_addr, &[gpio_reg_addr], &mut rd_buffer)
+        .unwrap();
+
+    // Modify the read value with mask
+    let modified_data = rd_buffer[0] & !mask_val;
+
+    // Write the modified value back
+    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
+    i2c.write(i2c_addr, &reg_addr_and_data).unwrap();
 }

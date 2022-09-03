@@ -18,12 +18,12 @@ Copyright (C) 2022 CJ McAllister
 #![no_std]
 
 use microbit::{
-    board::{Board, I2CExternalPins},
+    board::Board,
     hal::{
-        gpio::{Level, Output, Pin, PushPull},
-        pac::{twim0::frequency::FREQUENCY_A, Interrupt, NVIC, TWIM0},
+        gpio::Level,
+        pac::{Interrupt, NVIC, TWIM0},
         prelude::*,
-        timer, twim, Timer, Twim,
+        timer, Timer, Twim,
     },
     pac::{TIMER0, TIMER1},
 };
@@ -33,8 +33,8 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c_periphs;
+use crate::i2c_periphs::{I2C_ADDR_KEYPAD, init_i2c, rmw_mask_val_set, rmw_mask_val_unset};
 use crate::i2c_periphs::lcd1602;
-use crate::i2c_periphs::{MCP23008Register, I2C_ADDR_LCD};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -115,10 +115,22 @@ mod app {
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
 
+        let mut all_on = false;
         loop {
             cx.shared.timer0.lock(|timer0| {
                 timer0.delay_ms(500_u32);
             });
+
+            cx.shared.i2c0.lock(|i2c0| {
+                if all_on {
+                    rmw_mask_val_unset(I2C_ADDR_KEYPAD, 0b11111111, i2c0);
+                    all_on = false;
+                }
+                else {
+                    rmw_mask_val_set(I2C_ADDR_KEYPAD, 0b11111111, i2c0);
+                    all_on = true;
+                }
+            })
         }
     }
 
@@ -166,23 +178,5 @@ mod app {
         timer_device.start(ONE_SECOND_IN_MHZ);
 
         timer_device
-    }
-
-    fn init_i2c<T: twim::Instance>(
-        instance: T,
-        i2c_pins: I2CExternalPins,
-        reset_pin: &mut Pin<Output<PushPull>>,
-    ) -> Twim<T> {
-        // Create the TWIM object
-        let mut i2c_device = Twim::new(instance, twim::Pins::from(i2c_pins), FREQUENCY_A::K100);
-
-        // Pull all I2C devices out of reset
-        reset_pin.set_high().unwrap();
-
-        // Set all pins on LCD Display's MCP23008 to Output mode
-        let reg_addr_and_data: [u8; 2] = [MCP23008Register::IODIR as u8, 0b00000000];
-        i2c_device.write(I2C_ADDR_LCD, &reg_addr_and_data).unwrap();
-
-        i2c_device
     }
 }
