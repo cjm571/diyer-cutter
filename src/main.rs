@@ -77,6 +77,7 @@ mod app {
 
         // Hold various chips in reset/output-disabled
         let i2c_reset_pin = board.pins.p1_02.into_push_pull_output(Level::Low); // P16
+        let mut lcd_lvshift_oe_pin = board.pins.p0_12.into_push_pull_output(Level::High); // P12
 
         // Instantiate a timer
         let timer0 = init_1s_timer(board.TIMER0);
@@ -95,8 +96,11 @@ mod app {
         rprintln!("Enabling power to LCD Display...");
         lcd1602::power_on(&mut i2c0);
 
+        rprintln!("Enabling output on LCD Level Shifter...");
+        lcd_lvshift_oe_pin.set_low().unwrap();
+
         rprintln!("Initializing LCD Display...");
-        lcd1602::initialize_4b_1l(&mut timer1, &mut i2c0);
+        lcd1602::initialize(&mut timer1, &mut i2c0);
         lcd1602::display_greeting(&mut timer1, &mut i2c0);
 
         (
@@ -107,20 +111,19 @@ mod app {
     }
 
 
-    #[idle(shared = [timer0, i2c0/*, &i2c_verf_pins*/])]
+    #[idle(shared = [timer0, i2c0])]
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
 
-        // let mut count = 0;
         loop {
             cx.shared.timer0.lock(|timer0| {
-                timer0.delay_ms(100_u32);
+                timer0.delay_ms(500_u32);
             });
         }
     }
 
 
-    #[task(binds = TIMER1, /*shared = [&i2c_verf_pins],*/ local = [timer1])]
+    #[task(binds = TIMER1, local = [timer1])]
     fn timer1(cx: timer1::Context) {
         // Clear the timer interrupt flag
         cx.local
