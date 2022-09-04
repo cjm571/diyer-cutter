@@ -32,9 +32,9 @@ use rtt_target::{rprintln, rtt_init_print};
 
 use rtic::app;
 
-mod i2c_periphs;
-use crate::i2c_periphs::{I2C_ADDR_KEYPAD, init_i2c, rmw_mask_val_set, rmw_mask_val_unset};
-use crate::i2c_periphs::lcd1602;
+mod i2c;
+use crate::i2c::{I2C_ADDR_KEYPAD, gpio_set_rmw, gpio_unset_rmw};
+use crate::i2c::{lcd1602, keypad};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -85,8 +85,8 @@ mod app {
         // Initialize a 1-second timer
         let mut timer1 = init_1s_timer(board.TIMER1);
 
-        // Initialize the TWIM0 (I2C) device
-        let mut i2c0 = init_i2c(
+        // Initialize the TWIM0 (I2C) controller
+        let mut i2c0 = i2c::init(
             board.TWIM0,
             board.i2c_external,
             &mut i2c_reset_pin.degrade(),
@@ -100,8 +100,15 @@ mod app {
         lcd_lvshift_oe_pin.set_low().unwrap();
 
         rprintln!("Initializing LCD Display...");
-        lcd1602::initialize(&mut timer1, &mut i2c0);
+        lcd1602::init(&mut timer1, &mut i2c0);
         lcd1602::display_greeting(&mut timer1, &mut i2c0);
+
+        rprintln!("Initializing 3x4 Matrix Keypad...");
+        keypad::init(&mut i2c0);
+
+        //FIXME: DEBUG DELETE
+        let value = i2c::gpio_read(I2C_ADDR_KEYPAD, &mut i2c0);
+        rprintln!("*** MATRIX READ TEST: {:0>8b}", value);
 
         (
             Shared { timer0, i2c0 },
@@ -115,22 +122,10 @@ mod app {
     fn idle(mut cx: idle::Context) -> ! {
         rprintln!("Entering main loop");
 
-        let mut all_on = false;
         loop {
             cx.shared.timer0.lock(|timer0| {
                 timer0.delay_ms(500_u32);
             });
-
-            cx.shared.i2c0.lock(|i2c0| {
-                if all_on {
-                    rmw_mask_val_unset(I2C_ADDR_KEYPAD, 0b11111111, i2c0);
-                    all_on = false;
-                }
-                else {
-                    rmw_mask_val_set(I2C_ADDR_KEYPAD, 0b11111111, i2c0);
-                    all_on = true;
-                }
-            })
         }
     }
 

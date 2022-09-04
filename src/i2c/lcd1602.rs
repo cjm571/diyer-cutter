@@ -72,15 +72,18 @@ enum Direction {
 ///////////////////////////////////////////////////////////////////////////////
 
 pub fn power_on<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_PWR, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_PWR, i2c);
 }
 
 #[allow(dead_code)]
 pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_PWR, i2c);
+    gpio_unset_rmw(I2C_ADDR_LCD, MASK_PWR, i2c);
 }
 
-pub fn initialize<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+pub fn init<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
+    // 0. Set all pins on LCD Display's MCP23008 to Output mode (0)
+    register_value_set(I2C_ADDR_LCD, MCP23008Register::IODIR, 0b00000000, i2c);
+    
     // 1. Allow time for LCD VCC to rise to 4.5V
     rprintln!("Giving LCD time to initialize...");
     timer.delay_ms(T_RCC_IN_MS);
@@ -189,20 +192,20 @@ fn pulse_enable<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c
     timer.delay_us(T_AS_IN_US);
 
     // Set EN high
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_EN, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_EN, i2c);
 
     // Hold EN high for the required time
     timer.delay_us(PW_EH_IN_US);
 
     // Set EN low
-    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_EN, i2c);
+    gpio_unset_rmw(I2C_ADDR_LCD, MASK_EN, i2c);
 
     // Delay before allowing other operations to ensure Enable cycle time is not violated
     timer.delay_us(T_CYCE_IN_US - PW_EH_IN_US);
 }
 
 pub fn reset_pins<U: twim::Instance>(i2c: &mut Twim<U>) {
-    rmw_mask_val_unset(I2C_ADDR_LCD, MASK_ALL, i2c);
+    gpio_unset_rmw(I2C_ADDR_LCD, MASK_ALL, i2c);
 }
 
 #[allow(dead_code)]
@@ -212,12 +215,12 @@ pub fn clear_display<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D4, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D4, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -227,27 +230,27 @@ pub fn set_4bit_2line_mode<T: timer::Instance, U: twim::Instance>(
 ) {
     // First phase of Function Set command - sets 4-bit operation mode (just one write, unlike most others)
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D5, i2c);
     pulse_enable(timer, i2c);
 
     // Second phase of Function Set command - sets 4-bit, 2-line mode
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D5, i2c);
     pulse_enable(timer, i2c);
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D7, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D7, i2c);
     pulse_enable(timer, i2c);
 }
 
 pub fn set_cursor<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5 | MASK_D6 | MASK_D7, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D5 | MASK_D6 | MASK_D7, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -257,12 +260,12 @@ pub fn set_autoincrement<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D5 | MASK_D6, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D5 | MASK_D6, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -272,7 +275,7 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
     i2c: &mut Twim<U>,
 ) {
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_RS, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_RS, i2c);
 
     // Get the ASCII index of the character
     let ascii_idx = c as u32;
@@ -283,18 +286,18 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
         | ascii_idx & (1 << 6)
         | ascii_idx & (1 << 7))
         >> 1) as u8;
-    rmw_mask_val_set(I2C_ADDR_LCD, hi_order_mask, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, hi_order_mask, i2c);
     pulse_enable(timer, i2c);
 
     // Calculate lower-order bit mask based on ascii index value, set pins accordingly and pulse enable
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_RS, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_RS, i2c);
     let lo_order_mask = ((ascii_idx & (1 << 0)
         | ascii_idx & (1 << 1)
         | ascii_idx & (1 << 2)
         | ascii_idx & (1 << 3))
         << 3) as u8;
-    rmw_mask_val_set(I2C_ADDR_LCD, lo_order_mask, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, lo_order_mask, i2c);
     pulse_enable(timer, i2c);
 }
 
@@ -305,14 +308,14 @@ fn shift_cursor<T: timer::Instance, U: twim::Instance>(
 ) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D4, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D4, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
     // Left == low, Right == high
     if dir == Direction::Right {
-        rmw_mask_val_set(I2C_ADDR_LCD, MASK_D6, i2c);
+        gpio_set_rmw(I2C_ADDR_LCD, MASK_D6, i2c);
     }
     pulse_enable(timer, i2c);
 }
@@ -320,11 +323,11 @@ fn shift_cursor<T: timer::Instance, U: twim::Instance>(
 fn newline<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // Higher-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_D6 | MASK_D7, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_D6 | MASK_D7, i2c);
     pulse_enable(timer, i2c);
 
     // Lower-order data bits write
     reset_pins(i2c);
-    rmw_mask_val_set(I2C_ADDR_LCD, MASK_NONE, i2c);
+    gpio_set_rmw(I2C_ADDR_LCD, MASK_NONE, i2c);
     pulse_enable(timer, i2c);
 }
