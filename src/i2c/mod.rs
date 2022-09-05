@@ -100,35 +100,19 @@ pub fn gpio_read<U: twim::Instance>(i2c_addr: u8, i2c: &mut Twim<U>) -> u8 {
 }
 
 pub fn gpio_set_rmw<U: twim::Instance>(i2c_addr: u8, mask_val: u8, i2c: &mut Twim<U>) {
-    // Must declare this locally or the I2C driver will panic
-    let gpio_reg_addr = GPIO_REG_ADDR;
-
-    // Read value currently in specified register
-    let mut rd_buffer: [u8; 1] = [0x00];
-    i2c.write_then_read(i2c_addr, &[gpio_reg_addr], &mut rd_buffer)
-        .unwrap();
+    let rd_data = gpio_read(i2c_addr, i2c);
 
     // Modify the read value with mask
-    let modified_data = rd_buffer[0] | mask_val;
+    let modified_data = rd_data | mask_val;
 
-    // Write the modified value back
-    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
-    i2c.write(i2c_addr, &reg_addr_and_data).unwrap();
+    gpio_write(i2c_addr, modified_data, i2c);
 }
 
 pub fn gpio_unset_rmw<U: twim::Instance>(i2c_addr: u8, mask_val: u8, i2c: &mut Twim<U>) {
-    // Must declare this locally or the I2C driver will panic
-    let gpio_reg_addr = GPIO_REG_ADDR;
-
-    // Read value currently in specified register
-    let mut rd_buffer: [u8; 1] = [0x00];
-    i2c.write_then_read(i2c_addr, &[gpio_reg_addr], &mut rd_buffer)
-        .unwrap();
+    let rd_data = gpio_read(i2c_addr, i2c);
 
     // Modify the read value with mask
-    let modified_data = rd_buffer[0] & !mask_val;
+    let modified_data = rd_data & !mask_val;
 
-    // Write the modified value back
-    let reg_addr_and_data: [u8; 2] = [gpio_reg_addr, modified_data];
-    i2c.write(i2c_addr, &reg_addr_and_data).unwrap();
+    gpio_write(i2c_addr, modified_data, i2c);
 }

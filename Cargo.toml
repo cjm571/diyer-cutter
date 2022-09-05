@@ -22,3 +22,4 @@ test = false
 bench = false
 
 [features]
+debug_keypad = []

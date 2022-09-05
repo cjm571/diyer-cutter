@@ -106,10 +106,6 @@ mod app {
         rprintln!("Initializing 3x4 Matrix Keypad...");
         keypad::init(&mut i2c0);
 
-        //FIXME: DEBUG DELETE
-        let value = i2c::gpio_read(I2C_ADDR_KEYPAD, &mut i2c0);
-        rprintln!("*** MATRIX READ TEST: {:0>8b}", value);
-
         (
             Shared { timer0, i2c0 },
             Local { timer1 },
@@ -125,6 +121,10 @@ mod app {
         loop {
             cx.shared.timer0.lock(|timer0| {
                 timer0.delay_ms(500_u32);
+            });
+
+            cx.shared.i2c0.lock(|i2c0| {
+                keypad::scan(i2c0);
             });
         }
     }
