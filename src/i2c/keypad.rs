@@ -85,8 +85,8 @@ impl PressedKeys {
             Key::One => self.one = true,
             Key::Two => self.two = true,
             Key::Three => self.three = true,
-            Key::Four  => self.four = true,
-            Key::Five  => self.five = true,
+            Key::Four => self.four = true,
+            Key::Five => self.five = true,
             Key::Six => self.six = true,
             Key::Seven => self.seven = true,
             Key::Eight => self.eight = true,
@@ -111,7 +111,7 @@ pub fn init<T: twim::Instance>(i2c: &mut Twim<T>) {
 // Sweep across keypad columns and read each row to get button presses
 pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
     let mut pressed_keys = PressedKeys::default();
-    
+
     // Set C1 High and read Row values for presses
     gpio_write(I2C_ADDR_KEYPAD, MASK_C1, i2c);
     let c1_presses = gpio_read(I2C_ADDR_KEYPAD, i2c);
@@ -140,7 +140,7 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
         rprintln!("DEBUG_KEYPAD: '*' Pressed");
         pressed_keys.set_key(Key::Star);
     }
-    
+
     // Set C2 High and read Row values for presses
     gpio_write(I2C_ADDR_KEYPAD, MASK_C2, i2c);
     let c2_presses = gpio_read(I2C_ADDR_KEYPAD, i2c);
@@ -169,11 +169,11 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
         rprintln!("DEBUG_KEYPAD: '0' Pressed");
         pressed_keys.set_key(Key::Zero);
     }
-    
+
     // Set C3 High and read Row values for presses
     gpio_write(I2C_ADDR_KEYPAD, MASK_C3, i2c);
     let c3_presses = gpio_read(I2C_ADDR_KEYPAD, i2c);
-    
+
     // Check for "3" press
     if c3_presses & MASK_R1 > 0 {
         #[cfg(feature = "debug_keypad")]

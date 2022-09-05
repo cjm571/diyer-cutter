@@ -28,8 +28,8 @@ use microbit::{
     pac::twim0::frequency::FREQUENCY_A,
 };
 
-pub mod lcd1602;
 pub mod keypad;
+pub mod lcd1602;
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Named Constants
@@ -79,7 +79,12 @@ pub fn init<T: twim::Instance>(
     i2c_device
 }
 
-pub fn register_value_set<U: twim::Instance>(i2c_addr: u8, reg_addr: MCP23008Register, value: u8, i2c: &mut Twim<U>) {
+pub fn register_value_set<U: twim::Instance>(
+    i2c_addr: u8,
+    reg_addr: MCP23008Register,
+    value: u8,
+    i2c: &mut Twim<U>,
+) {
     let reg_addr_and_data: [u8; 2] = [reg_addr as u8, value];
     i2c.write(i2c_addr, &reg_addr_and_data).unwrap();
 }
@@ -91,7 +96,7 @@ pub fn gpio_write<U: twim::Instance>(i2c_addr: u8, value: u8, i2c: &mut Twim<U>)
 pub fn gpio_read<U: twim::Instance>(i2c_addr: u8, i2c: &mut Twim<U>) -> u8 {
     // Must declare this locally or the I2C driver will panic
     let gpio_reg_addr = GPIO_REG_ADDR;
-    
+
     let mut rd_buffer: [u8; 1] = [0x00];
     i2c.write_then_read(i2c_addr, &[gpio_reg_addr], &mut rd_buffer)
         .unwrap();

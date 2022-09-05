@@ -33,8 +33,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c;
-use crate::i2c::{I2C_ADDR_KEYPAD, gpio_set_rmw, gpio_unset_rmw};
-use crate::i2c::{lcd1602, keypad};
+use crate::i2c::{keypad, lcd1602};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -46,6 +45,7 @@ mod app {
     ///////////////////////////////////////////////////////////////////////////////
 
     const ONE_SECOND_IN_MHZ: u32 = 1000000;
+    const GREETING_DUR_IN_MS: u32 = 2500;
 
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -101,7 +101,6 @@ mod app {
 
         rprintln!("Initializing LCD Display...");
         lcd1602::init(&mut timer1, &mut i2c0);
-        lcd1602::display_greeting(&mut timer1, &mut i2c0);
 
         rprintln!("Initializing 3x4 Matrix Keypad...");
         keypad::init(&mut i2c0);
@@ -116,15 +115,21 @@ mod app {
 
     #[idle(shared = [timer0, i2c0])]
     fn idle(mut cx: idle::Context) -> ! {
-        rprintln!("Entering main loop");
+        (&mut cx.shared.timer0, &mut cx.shared.i2c0).lock(|timer, i2c| {
+            // Display greeting
+            lcd1602::display_greeting(timer, i2c);
+            timer.delay_ms(GREETING_DUR_IN_MS);
 
+            // Prompt user for Cut Length
+            lcd1602::clear_display(timer, i2c);
+            lcd1602::write_string("CUT LENGTH (in):\n-> ", timer, i2c);
+        });
+
+        rprintln!("Entering Idle loop");
         loop {
-            cx.shared.timer0.lock(|timer0| {
-                timer0.delay_ms(500_u32);
-            });
-
-            cx.shared.i2c0.lock(|i2c0| {
-                keypad::scan(i2c0);
+            (&mut cx.shared.timer0, &mut cx.shared.i2c0).lock(|timer, ref mut i2c| {
+                timer.delay_ms(500_u32);
+                keypad::scan(i2c);
             });
         }
     }

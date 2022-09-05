@@ -83,7 +83,7 @@ pub fn power_off<U: twim::Instance>(i2c: &mut Twim<U>) {
 pub fn init<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
     // 0. Set all pins on LCD Display's MCP23008 to Output mode (0)
     register_value_set(I2C_ADDR_LCD, MCP23008Register::IODIR, 0b00000000, i2c);
-    
+
     // 1. Allow time for LCD VCC to rise to 4.5V
     rprintln!("Giving LCD time to initialize...");
     timer.delay_ms(T_RCC_IN_MS);
