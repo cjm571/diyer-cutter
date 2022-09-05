@@ -135,7 +135,7 @@ mod app {
                         // Check for '#', which will accept the input and move to next prompt
                         if key == Key::Pound {
                             rprintln!("User accepted Cut Length of {}", 9999);
-                            break;
+                            return;
                         }
 
                         lcd1602::write_string(key.into(), timer, i2c);
