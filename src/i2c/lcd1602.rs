@@ -112,28 +112,33 @@ pub fn display_greeting<T: timer::Instance, U: twim::Instance>(
     rprintln!("Writing greeting...");
 }
 
-#[allow(dead_code)]
-pub fn write_u8<T: timer::Instance, U: twim::Instance>(
-    val: u8,
+pub fn write_u32<T: timer::Instance, U: twim::Instance>(
+    val: u32,
     timer: &mut Timer<T>,
     i2c: &mut Twim<U>,
 ) {
     // Convert value to its zero-padded ASCII values
     let ones = val % 10;
     let tens = ((val - ones) % 100) / 10;
-    let hundreds = (val - tens - ones) / 100;
+    let hundreds = ((val - tens - ones) % 1000) / 100;
+    let thousands = ((val - hundreds - tens - ones) % 10000) / 1000;
+    let ten_thousands = (val - thousands - hundreds - tens - ones) / 10000;
 
     let ascii_vals = [
-        hundreds + ASCII_INT_OFFSET as u8,
-        tens + ASCII_INT_OFFSET as u8,
-        ones + ASCII_INT_OFFSET as u8,
+        ten_thousands + ASCII_INT_OFFSET as u32,
+        thousands + ASCII_INT_OFFSET as u32,
+        hundreds + ASCII_INT_OFFSET as u32,
+        tens + ASCII_INT_OFFSET as u32,
+        ones + ASCII_INT_OFFSET as u32,
     ];
 
     // Encode ASCII values as &strs
-    let mut tmp = [0; 3];
-    for i in 0..3 {
+    let mut tmp = [0; 5];
+    for i in 0..5 {
         // Write the stringified value to the display
-        let out_str = (ascii_vals[i] as char).encode_utf8(&mut tmp);
+        let out_str = (char::from_u32(ascii_vals[i]))
+            .unwrap()
+            .encode_utf8(&mut tmp);
         write_string(out_str, timer, i2c);
     }
 }

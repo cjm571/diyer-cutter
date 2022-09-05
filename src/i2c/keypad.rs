@@ -13,7 +13,7 @@ Copyright (C) 2022 CJ McAllister
     Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-use microbit::hal::{twim, Twim, timer, Timer};
+use microbit::hal::{timer, twim, Timer, Twim};
 
 #[cfg(feature = "debug_keypad")]
 use rtt_target::rprintln;
@@ -183,7 +183,10 @@ pub fn init<T: twim::Instance>(i2c: &mut Twim<T>) {
 
 //OPT: Probably a more clever way to do this...
 // Sweep across keypad columns and read each row to get button presses
-pub fn scan<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) -> Option<Key> {
+pub fn scan<T: timer::Instance, U: twim::Instance>(
+    timer: &mut Timer<T>,
+    i2c: &mut Twim<U>,
+) -> Option<Key> {
     let mut pressed_key = None;
     let mut key_pressed = false;
 
