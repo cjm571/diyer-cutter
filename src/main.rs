@@ -144,7 +144,7 @@ mod app {
                     rprintln!("User rejected confirmation");
                     continue;
                 } else {
-                    // User confirmed, break out of input loop
+                    // User accepted confirmation, break out of input loop
                     rprintln!("User accepted confirmation");
                     lcd1602::clear_display(timer, i2c);
                     lcd1602::write_string("Input accepted!\nCutting...", timer, i2c);
@@ -270,8 +270,18 @@ mod app {
         lcd1602::write_u32(num_cuts, timer, i2c);
         lcd1602::write_string("\nOK? (#=Y, *=N) ", timer, i2c);
 
-        //FIXME: DEBUG DELETE
-        timer.delay_ms(2500_u32);
-        return true;
+        loop {
+            if let Some(pressed_key) = keypad::scan(timer, i2c) {
+                if pressed_key == Key::Pound {
+                    // User accepted confirmation
+                    return true;
+                } else if pressed_key == Key::Star {
+                    // User rejected confirmation
+                    return false;
+                } else {
+                    continue;
+                }
+            }
+        }
     }
 }

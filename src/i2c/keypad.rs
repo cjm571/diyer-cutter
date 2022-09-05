@@ -25,8 +25,6 @@ use super::*;
 //  Named Constants
 ///////////////////////////////////////////////////////////////////////////////
 
-const NUM_KEYS: usize = 12;
-
 const DEBOUNCE_DELAY_IN_US: u32 = 250;
 
 const MASK_C2: u8 = 0b00000001;
@@ -62,12 +60,6 @@ pub enum Key {
     Pound,
 }
 
-#[derive(Debug)]
-pub struct PressedKeys {
-    key_states: [(Key, bool); NUM_KEYS],
-    itr_idx: usize,
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 //  Object Implementations
 ///////////////////////////////////////////////////////////////////////////////
@@ -88,87 +80,6 @@ impl Into<&str> for Key {
             Key::Zero => "0",
             Key::Pound => "#",
         }
-    }
-}
-
-impl PressedKeys {
-    pub fn new() -> Self {
-        Self {
-            key_states: [
-                (Key::One, false),
-                (Key::Two, false),
-                (Key::Three, false),
-                (Key::Four, false),
-                (Key::Five, false),
-                (Key::Six, false),
-                (Key::Seven, false),
-                (Key::Eight, false),
-                (Key::Nine, false),
-                (Key::Star, false),
-                (Key::Zero, false),
-                (Key::Pound, false),
-            ],
-            itr_idx: 0,
-        }
-    }
-
-    /*  *  *  *  *  *  *  *  *\
-     *  Accessors/Mutators   *
-    \*  *  *  *  *  *  *  *  */
-
-    pub fn set_key(&mut self, key: Key) {
-        match key {
-            Key::One => self.key_states[0].1 = true,
-            Key::Two => self.key_states[1].1 = true,
-            Key::Three => self.key_states[2].1 = true,
-            Key::Four => self.key_states[3].1 = true,
-            Key::Five => self.key_states[4].1 = true,
-            Key::Six => self.key_states[5].1 = true,
-            Key::Seven => self.key_states[6].1 = true,
-            Key::Eight => self.key_states[7].1 = true,
-            Key::Nine => self.key_states[8].1 = true,
-            Key::Star => self.key_states[9].1 = true,
-            Key::Zero => self.key_states[10].1 = true,
-            Key::Pound => self.key_states[11].1 = true,
-        }
-    }
-}
-
-impl Iterator for PressedKeys {
-    type Item = Key;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // Bounds pre-check
-        if self.itr_idx >= NUM_KEYS {
-            #[cfg(feature = "debug_keypad")]
-            rprintln!("DEBUG_KEYPAD: Bounds pre-check failed, returning None");
-            return None;
-        }
-
-        while self.key_states[self.itr_idx].1 == false {
-            #[cfg(feature = "debug_keypad")]
-            rprintln!(
-                "DEBUG_KEYPAD: No pressed keys at itr_idx {}, incrementing",
-                self.itr_idx
-            );
-            self.itr_idx += 1;
-
-            // Bounds check
-            if self.itr_idx >= NUM_KEYS {
-                #[cfg(feature = "debug_keypad")]
-                rprintln!("DEBUG_KEYPAD: Bounds check failed, returning None");
-                return None;
-            }
-        }
-
-        #[cfg(feature = "debug_keypad")]
-        rprintln!(
-            "DEBUG_KEYPAD: Found pressed key at itr_idx {}",
-            self.itr_idx
-        );
-        let found_idx = self.itr_idx;
-        self.itr_idx += 1;
-        Some(self.key_states[found_idx].0)
     }
 }
 
