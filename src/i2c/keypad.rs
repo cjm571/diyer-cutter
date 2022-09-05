@@ -13,7 +13,7 @@ Copyright (C) 2022 CJ McAllister
     Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-use microbit::hal::{twim, Twim};
+use microbit::hal::{twim, Twim, timer, Timer};
 
 #[cfg(feature = "debug_keypad")]
 use rtt_target::rprintln;
@@ -26,6 +26,8 @@ use super::*;
 ///////////////////////////////////////////////////////////////////////////////
 
 const NUM_KEYS: usize = 12;
+
+const DEBOUNCE_DELAY_IN_US: u32 = 250;
 
 const MASK_C2: u8 = 0b00000001;
 const MASK_R1: u8 = 0b00000010;
@@ -181,8 +183,8 @@ pub fn init<T: twim::Instance>(i2c: &mut Twim<T>) {
 
 //OPT: Probably a more clever way to do this...
 // Sweep across keypad columns and read each row to get button presses
-pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> Option<PressedKeys> {
-    let mut pressed_keys = PressedKeys::new();
+pub fn scan<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) -> Option<Key> {
+    let mut pressed_key = None;
     let mut key_pressed = false;
 
     // Set C1 High and read Row values for presses
@@ -193,28 +195,28 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> Option<PressedKeys> {
     if c1_presses & MASK_R1 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '1' Pressed");
-        pressed_keys.set_key(Key::One);
+        pressed_key = Some(Key::One);
         key_pressed = true;
     }
     // Check for "4" press
     if c1_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '4' Pressed");
-        pressed_keys.set_key(Key::Four);
+        pressed_key = Some(Key::Four);
         key_pressed = true;
     }
     // Check for "7" press
     if c1_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '7' Pressed");
-        pressed_keys.set_key(Key::Seven);
+        pressed_key = Some(Key::Seven);
         key_pressed = true;
     }
     // Check for "*" press
     if c1_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '*' Pressed");
-        pressed_keys.set_key(Key::Star);
+        pressed_key = Some(Key::Star);
         key_pressed = true;
     }
 
@@ -226,28 +228,28 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> Option<PressedKeys> {
     if c2_presses & MASK_R1 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '2' Pressed");
-        pressed_keys.set_key(Key::Two);
+        pressed_key = Some(Key::Two);
         key_pressed = true;
     }
     // Check for "5" press
     if c2_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '5' Pressed");
-        pressed_keys.set_key(Key::Five);
+        pressed_key = Some(Key::Five);
         key_pressed = true;
     }
     // Check for "8" press
     if c2_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '8' Pressed");
-        pressed_keys.set_key(Key::Eight);
+        pressed_key = Some(Key::Eight);
         key_pressed = true;
     }
     // Check for "0" press
     if c2_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '0' Pressed");
-        pressed_keys.set_key(Key::Zero);
+        pressed_key = Some(Key::Zero);
         key_pressed = true;
     }
 
@@ -259,34 +261,44 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> Option<PressedKeys> {
     if c3_presses & MASK_R1 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '3' Pressed");
-        pressed_keys.set_key(Key::Three);
+        pressed_key = Some(Key::Three);
         key_pressed = true;
     }
     // Check for "6" press
     if c3_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '6' Pressed");
-        pressed_keys.set_key(Key::Six);
+        pressed_key = Some(Key::Six);
         key_pressed = true;
     }
     // Check for "9" press
     if c3_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '9' Pressed");
-        pressed_keys.set_key(Key::Nine);
+        pressed_key = Some(Key::Nine);
         key_pressed = true;
     }
     // Check for "#" press
     if c3_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '#' Pressed");
-        pressed_keys.set_key(Key::Pound);
+        pressed_key = Some(Key::Pound);
         key_pressed = true;
     }
 
     if key_pressed {
-        Some(pressed_keys)
+        //OPT: This debouncing implementation will blow up if a key is held for too long...
+        // Key was pressed, to "debounce" scan until it's no longer pressed
+        while let Some(_still_pressed_key) = scan(timer, i2c) {
+            #[cfg(feature = "debug_keypad")]
+            rprintln!("DEBUG_KEYPAD: Debouncing '{:?}'...", _still_pressed_key);
+            timer.delay_us(DEBOUNCE_DELAY_IN_US);
+        }
+
+        // Return the pressed key
+        pressed_key
     } else {
+        // No key was pressed, return None
         None
     }
 }

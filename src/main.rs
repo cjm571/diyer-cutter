@@ -23,7 +23,7 @@ use microbit::{
         gpio::Level,
         pac::{Interrupt, NVIC, TWIM0},
         prelude::*,
-        timer, Timer, Twim,
+        timer, Timer, twim, Twim,
     },
     pac::{TIMER0, TIMER1},
 };
@@ -49,6 +49,8 @@ mod app {
 
     const ONE_SECOND_IN_MHZ: u32 = 1000000;
     const GREETING_DUR_IN_MS: u32 = 2500;
+
+    const MAX_INPUT_CHARS: usize = 12;
 
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -125,33 +127,16 @@ mod app {
 
             // Prompt user for Cut Length
             rprintln!("Prompting user for Cut Length...");
-            lcd1602::clear_display(timer, i2c);
-            lcd1602::write_string("CUT LENGTH (in):\n-> ", timer, i2c);
-            loop {
-                if let Some(pressed_keys) = keypad::scan(i2c) {
-                    rprintln!("PRESSED_KEYS: {:?}", pressed_keys);
-                    for key in pressed_keys {
-                        // Check for '#', which will accept the input and move to next prompt
-                        if key == Key::Pound {
-                            //FIXME: Not real input
-                            rprintln!("User accepted Cut Length of {}", 9999);
-                            return;
-                        }
-
-                        // Otherwise, write the key to the LCD
-                        lcd1602::write_string(key.into(), timer, i2c);
-                    }
-                } else {
-                    continue;
-                }
-            }
+            let cut_length = get_user_parameter("CUT LENGTH (in):\n-> ", timer, i2c);
+            rprintln!("User accepted Cut Length of {}", cut_length);
+            
         });
 
         rprintln!("Entering Idle loop");
         loop {
             (&mut cx.shared.timer0, &mut cx.shared.i2c0).lock(|timer, ref mut i2c| {
                 timer.delay_ms(500_u32);
-                keypad::scan(i2c);
+                keypad::scan(timer, i2c);
             });
         }
     }
@@ -200,5 +185,56 @@ mod app {
         timer_device.start(ONE_SECOND_IN_MHZ);
 
         timer_device
+    }
+
+    fn get_user_parameter<T: timer::Instance, U: twim::Instance>(prompt: &str, timer: &mut Timer<T>, i2c: &mut Twim<U>) -> u32 {
+        lcd1602::clear_display(timer, i2c);
+            lcd1602::write_string(prompt, timer, i2c);
+
+            let mut user_input: [&str; 12] = [""; 12];
+            let mut user_input_idx = 0;
+            loop {
+                if let Some(pressed_key) = keypad::scan(timer, i2c) {
+                    // Check for '#', which will parse and accept the input
+                    if pressed_key == Key::Pound {
+                        rprintln!("USER_INPUT_ARR: {:?}", user_input);
+
+                        let mut parsed_input = 0;
+                        let mut order_of_magnitude = 0;
+                        for parsed_value in user_input.iter().rev().map(|v| v.parse::<u32>()) {
+                            if let Ok(value) = parsed_value {
+                                rprintln!("Adding {}*10^{} to parsed_input of {}", value, order_of_magnitude, parsed_input);
+                                parsed_input += value * u32::pow(10, order_of_magnitude);
+                                order_of_magnitude += 1;
+                                rprintln!("result: {}\n", parsed_input);
+                            }
+                        }
+                        
+                        return parsed_input;
+                    }
+                    // Check for '*', which acts as a backspace key
+                    if pressed_key == Key::Star {
+                        //OPT: Beep if input is empty?
+                        // Don't allow backspace if input is empty
+                        if user_input_idx > 0 {
+                            lcd1602::backspace(1, timer, i2c);
+                            user_input_idx -= 1;
+                            user_input[user_input_idx] = "";
+                        }
+                        
+                        continue;
+                    }
+
+                    //OPT: Beep if input is full?
+                    // If not at max length, write the key to the LCD and record it in the input array
+                    if user_input_idx < MAX_INPUT_CHARS {
+                        lcd1602::write_string(pressed_key.into(), timer, i2c);
+                        user_input[user_input_idx] = pressed_key.into();
+                        user_input_idx += 1;
+                    }
+                } else {
+                    continue;
+                }
+            }
     }
 }
