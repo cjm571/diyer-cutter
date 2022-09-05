@@ -145,7 +145,10 @@ impl Iterator for PressedKeys {
 
         while self.key_states[self.itr_idx].1 == false {
             #[cfg(feature = "debug_keypad")]
-            rprintln!("DEBUG_KEYPAD: No pressed keys at itr_idx {}, incrementing", self.itr_idx);
+            rprintln!(
+                "DEBUG_KEYPAD: No pressed keys at itr_idx {}, incrementing",
+                self.itr_idx
+            );
             self.itr_idx += 1;
 
             // Bounds check
@@ -157,7 +160,10 @@ impl Iterator for PressedKeys {
         }
 
         #[cfg(feature = "debug_keypad")]
-        rprintln!("DEBUG_KEYPAD: Found pressed key at itr_idx {}", self.itr_idx);
+        rprintln!(
+            "DEBUG_KEYPAD: Found pressed key at itr_idx {}",
+            self.itr_idx
+        );
         let found_idx = self.itr_idx;
         self.itr_idx += 1;
         Some(self.key_states[found_idx].0)

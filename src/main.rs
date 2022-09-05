@@ -33,7 +33,10 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c;
-use crate::i2c::{keypad::{self, Key}, lcd1602};
+use crate::i2c::{
+    keypad::{self, Key},
+    lcd1602,
+};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -128,16 +131,14 @@ mod app {
                 if let Some(pressed_keys) = keypad::scan(i2c) {
                     rprintln!("PRESSED_KEYS: {:?}", pressed_keys);
                     for key in pressed_keys {
-                        //FIXME: DEBUG DELETE
-                        let key_str: &str = key.into();
-                        rprintln!("WRITING KEY: {}", key_str);
-
                         // Check for '#', which will accept the input and move to next prompt
                         if key == Key::Pound {
+                            //FIXME: Not real input
                             rprintln!("User accepted Cut Length of {}", 9999);
                             return;
                         }
 
+                        // Otherwise, write the key to the LCD
                         lcd1602::write_string(key.into(), timer, i2c);
                     }
                 } else {
