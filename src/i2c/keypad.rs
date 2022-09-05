@@ -13,7 +13,9 @@ Copyright (C) 2022 CJ McAllister
     Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-use microbit::hal::{prelude::*, timer, twim, Timer, Twim};
+use microbit::hal::{twim, Twim};
+
+#[cfg(feature = "debug_keypad")]
 use rtt_target::rprintln;
 
 use super::*;
@@ -22,6 +24,8 @@ use super::*;
 ///////////////////////////////////////////////////////////////////////////////
 //  Named Constants
 ///////////////////////////////////////////////////////////////////////////////
+
+const NUM_KEYS: usize = 12;
 
 const MASK_C2: u8 = 0b00000001;
 const MASK_R1: u8 = 0b00000010;
@@ -40,61 +44,123 @@ const MASK_ALL_ROWS: u8 = MASK_R1 | MASK_R2 | MASK_R3 | MASK_R4;
 //  Data Structures
 ///////////////////////////////////////////////////////////////////////////////
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Key {
-    One = 0b000000000001,
-    Two = 0b000000000010,
-    Three = 0b000000000100,
-    Four = 0b000000001000,
-    Five = 0b000000010000,
-    Six = 0b000000100000,
-    Seven = 0b000001000000,
-    Eight = 0b000010000000,
-    Nine = 0b000100000000,
-    Star = 0b001000000000,
-    Zero = 0b010000000000,
-    Pound = 0b100000000000,
+    One,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    Seven,
+    Eight,
+    Nine,
+    Star,
+    Zero,
+    Pound,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct PressedKeys {
-    one: bool,
-    two: bool,
-    three: bool,
-    four: bool,
-    five: bool,
-    six: bool,
-    seven: bool,
-    eight: bool,
-    nine: bool,
-    star: bool,
-    zero: bool,
-    pound: bool,
+    key_states: [(Key, bool); NUM_KEYS],
+    itr_idx: usize,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Object Implementations
 ///////////////////////////////////////////////////////////////////////////////
 
+impl Into<&str> for Key {
+    fn into(self) -> &'static str {
+        match self {
+            Key::One => "1",
+            Key::Two => "2",
+            Key::Three => "3",
+            Key::Four => "4",
+            Key::Five => "5",
+            Key::Six => "6",
+            Key::Seven => "7",
+            Key::Eight => "8",
+            Key::Nine => "9",
+            Key::Star => "*",
+            Key::Zero => "0",
+            Key::Pound => "#",
+        }
+    }
+}
+
 impl PressedKeys {
+    pub fn new() -> Self {
+        Self {
+            key_states: [
+                (Key::One, false),
+                (Key::Two, false),
+                (Key::Three, false),
+                (Key::Four, false),
+                (Key::Five, false),
+                (Key::Six, false),
+                (Key::Seven, false),
+                (Key::Eight, false),
+                (Key::Nine, false),
+                (Key::Star, false),
+                (Key::Zero, false),
+                (Key::Pound, false),
+            ],
+            itr_idx: 0,
+        }
+    }
+
     /*  *  *  *  *  *  *  *  *\
      *  Accessors/Mutators   *
     \*  *  *  *  *  *  *  *  */
 
     pub fn set_key(&mut self, key: Key) {
         match key {
-            Key::One => self.one = true,
-            Key::Two => self.two = true,
-            Key::Three => self.three = true,
-            Key::Four => self.four = true,
-            Key::Five => self.five = true,
-            Key::Six => self.six = true,
-            Key::Seven => self.seven = true,
-            Key::Eight => self.eight = true,
-            Key::Nine => self.nine = true,
-            Key::Star => self.star = true,
-            Key::Zero => self.zero = true,
-            Key::Pound => self.pound = true,
+            Key::One => self.key_states[0].1 = true,
+            Key::Two => self.key_states[1].1 = true,
+            Key::Three => self.key_states[2].1 = true,
+            Key::Four => self.key_states[3].1 = true,
+            Key::Five => self.key_states[4].1 = true,
+            Key::Six => self.key_states[5].1 = true,
+            Key::Seven => self.key_states[6].1 = true,
+            Key::Eight => self.key_states[7].1 = true,
+            Key::Nine => self.key_states[8].1 = true,
+            Key::Star => self.key_states[9].1 = true,
+            Key::Zero => self.key_states[10].1 = true,
+            Key::Pound => self.key_states[11].1 = true,
         }
+    }
+}
+
+impl Iterator for PressedKeys {
+    type Item = Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Bounds pre-check
+        if self.itr_idx >= NUM_KEYS {
+            #[cfg(feature = "debug_keypad")]
+            rprintln!("DEBUG_KEYPAD: Bounds pre-check failed, returning None");
+            return None;
+        }
+
+        while self.key_states[self.itr_idx].1 == false {
+            #[cfg(feature = "debug_keypad")]
+            rprintln!("DEBUG_KEYPAD: No pressed keys at itr_idx {}, incrementing", self.itr_idx);
+            self.itr_idx += 1;
+
+            // Bounds check
+            if self.itr_idx >= NUM_KEYS {
+                #[cfg(feature = "debug_keypad")]
+                rprintln!("DEBUG_KEYPAD: Bounds check failed, returning None");
+                return None;
+            }
+        }
+
+        #[cfg(feature = "debug_keypad")]
+        rprintln!("DEBUG_KEYPAD: Found pressed key at itr_idx {}", self.itr_idx);
+        let found_idx = self.itr_idx;
+        self.itr_idx += 1;
+        Some(self.key_states[found_idx].0)
     }
 }
 
@@ -109,8 +175,9 @@ pub fn init<T: twim::Instance>(i2c: &mut Twim<T>) {
 
 //OPT: Probably a more clever way to do this...
 // Sweep across keypad columns and read each row to get button presses
-pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
-    let mut pressed_keys = PressedKeys::default();
+pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> Option<PressedKeys> {
+    let mut pressed_keys = PressedKeys::new();
+    let mut key_pressed = false;
 
     // Set C1 High and read Row values for presses
     gpio_write(I2C_ADDR_KEYPAD, MASK_C1, i2c);
@@ -121,24 +188,28 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '1' Pressed");
         pressed_keys.set_key(Key::One);
+        key_pressed = true;
     }
     // Check for "4" press
     if c1_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '4' Pressed");
         pressed_keys.set_key(Key::Four);
+        key_pressed = true;
     }
     // Check for "7" press
     if c1_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '7' Pressed");
         pressed_keys.set_key(Key::Seven);
+        key_pressed = true;
     }
     // Check for "*" press
     if c1_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '*' Pressed");
         pressed_keys.set_key(Key::Star);
+        key_pressed = true;
     }
 
     // Set C2 High and read Row values for presses
@@ -150,24 +221,28 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '2' Pressed");
         pressed_keys.set_key(Key::Two);
+        key_pressed = true;
     }
     // Check for "5" press
     if c2_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '5' Pressed");
         pressed_keys.set_key(Key::Five);
+        key_pressed = true;
     }
     // Check for "8" press
     if c2_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '8' Pressed");
         pressed_keys.set_key(Key::Eight);
+        key_pressed = true;
     }
     // Check for "0" press
     if c2_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '0' Pressed");
         pressed_keys.set_key(Key::Zero);
+        key_pressed = true;
     }
 
     // Set C3 High and read Row values for presses
@@ -179,25 +254,33 @@ pub fn scan<T: twim::Instance>(i2c: &mut Twim<T>) -> PressedKeys {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '3' Pressed");
         pressed_keys.set_key(Key::Three);
+        key_pressed = true;
     }
     // Check for "6" press
     if c3_presses & MASK_R2 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '6' Pressed");
         pressed_keys.set_key(Key::Six);
+        key_pressed = true;
     }
     // Check for "9" press
     if c3_presses & MASK_R3 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '9' Pressed");
         pressed_keys.set_key(Key::Nine);
+        key_pressed = true;
     }
     // Check for "#" press
     if c3_presses & MASK_R4 > 0 {
         #[cfg(feature = "debug_keypad")]
         rprintln!("DEBUG_KEYPAD: '#' Pressed");
         pressed_keys.set_key(Key::Pound);
+        key_pressed = true;
     }
 
-    pressed_keys
+    if key_pressed {
+        Some(pressed_keys)
+    } else {
+        None
+    }
 }

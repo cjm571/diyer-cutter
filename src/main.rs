@@ -33,7 +33,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use rtic::app;
 
 mod i2c;
-use crate::i2c::{keypad, lcd1602};
+use crate::i2c::{keypad::{self, Key}, lcd1602};
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -121,8 +121,29 @@ mod app {
             timer.delay_ms(GREETING_DUR_IN_MS);
 
             // Prompt user for Cut Length
+            rprintln!("Prompting user for Cut Length...");
             lcd1602::clear_display(timer, i2c);
             lcd1602::write_string("CUT LENGTH (in):\n-> ", timer, i2c);
+            loop {
+                if let Some(pressed_keys) = keypad::scan(i2c) {
+                    rprintln!("PRESSED_KEYS: {:?}", pressed_keys);
+                    for key in pressed_keys {
+                        //FIXME: DEBUG DELETE
+                        let key_str: &str = key.into();
+                        rprintln!("WRITING KEY: {}", key_str);
+
+                        // Check for '#', which will accept the input and move to next prompt
+                        if key == Key::Pound {
+                            rprintln!("User accepted Cut Length of {}", 9999);
+                            break;
+                        }
+
+                        lcd1602::write_string(key.into(), timer, i2c);
+                    }
+                } else {
+                    continue;
+                }
+            }
         });
 
         rprintln!("Entering Idle loop");
