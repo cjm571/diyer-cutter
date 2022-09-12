@@ -222,12 +222,13 @@ mod app {
                 // Check for '#', which will parse and accept the input
                 if pressed_key == Key::Pound {
                     let mut parsed_input = 0;
-                    let mut order_of_magnitude = 0;
-                    for parsed_value in user_input.iter().rev().map(|v| v.parse::<u32>()) {
-                        if let Ok(value) = parsed_value {
-                            parsed_input += value * u32::pow(10, order_of_magnitude);
-                            order_of_magnitude += 1;
-                        }
+                    for (order_of_magnitude, parsed_value) in user_input
+                        .iter()
+                        .rev()
+                        .flat_map(|v| v.parse::<u32>())
+                        .enumerate()
+                    {
+                        parsed_input += parsed_value * u32::pow(10, order_of_magnitude as u32);
                     }
 
                     return parsed_input;

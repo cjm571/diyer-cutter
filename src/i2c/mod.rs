@@ -46,6 +46,7 @@ const GPIO_REG_ADDR: u8 = MCP23008Register::GPIO as u8;
 ///////////////////////////////////////////////////////////////////////////////
 
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
 pub enum MCP23008Register {
     IODIR = 0x00,

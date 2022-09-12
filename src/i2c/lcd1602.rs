@@ -134,11 +134,9 @@ pub fn write_u32<T: timer::Instance, U: twim::Instance>(
 
     // Encode ASCII values as &strs
     let mut tmp = [0; 5];
-    for i in 0..5 {
+    for ascii_val in ascii_vals {
         // Write the stringified value to the display
-        let out_str = (char::from_u32(ascii_vals[i]))
-            .unwrap()
-            .encode_utf8(&mut tmp);
+        let out_str = (char::from_u32(ascii_val)).unwrap().encode_utf8(&mut tmp);
         write_string(out_str, timer, i2c);
     }
 }

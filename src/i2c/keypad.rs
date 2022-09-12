@@ -44,7 +44,7 @@ const MASK_ALL_ROWS: u8 = MASK_R1 | MASK_R2 | MASK_R3 | MASK_R4;
 //  Data Structures
 ///////////////////////////////////////////////////////////////////////////////
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Key {
     One,
     Two,
@@ -64,9 +64,9 @@ pub enum Key {
 //  Object Implementations
 ///////////////////////////////////////////////////////////////////////////////
 
-impl Into<&str> for Key {
-    fn into(self) -> &'static str {
-        match self {
+impl From<Key> for &str {
+    fn from(key: Key) -> Self {
+        match key {
             Key::One => "1",
             Key::Two => "2",
             Key::Three => "3",
