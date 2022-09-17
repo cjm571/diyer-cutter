@@ -21,7 +21,7 @@ use microbit::{
     board::Board,
     hal::{
         gpio::Level,
-        pac::{Interrupt, NVIC, TWIM0},
+        pac::{Interrupt, NVIC, PWM0, TWIM0},
         prelude::*,
         timer, twim, Timer, Twim,
     },
@@ -39,7 +39,7 @@ use crate::i2c::{
 };
 
 mod servo;
-use servo::{Servo};
+use servo::Servo;
 
 
 #[app(device = microbit::pac, peripherals = true)]
@@ -56,6 +56,9 @@ mod app {
     // Cap input to 5 digits for ease of implementation
     const MAX_INPUT_CHARS: usize = 5;
 
+    const CUT_CYCLE_TIME_MS: u32 = 1500;
+    const WIRE_FEED_TIME_MS: u32 = 3000;
+
 
     ///////////////////////////////////////////////////////////////////////////////
     //  Data Structures
@@ -70,6 +73,7 @@ mod app {
     #[local]
     struct Local {
         timer1: Timer<TIMER1>,
+        cutter: Servo<PWM0>,
     }
 
 
@@ -116,36 +120,37 @@ mod app {
 
         rprintln!("Initializing Cutter Servo...");
         let pwm_output_pin = board.pins.p0_09.into_push_pull_output(Level::Low).degrade();
-        let mut cutter = Servo::new(board.PWM0, microbit::hal::pwm::Channel::C0, pwm_output_pin);
-
-        //FIXME: DEBUG DELETE
-        cutter.set_duty(90.0);
-        rprintln!("{:?}", cutter);
+        let cutter = Servo::new(board.PWM0, microbit::hal::pwm::Channel::C0, pwm_output_pin);
 
         (
             Shared { timer0, i2c0 },
-            Local { timer1 },
+            Local { timer1, cutter },
             init::Monotonics(),
         )
     }
 
 
-    #[idle(shared = [timer0, i2c0])]
+    #[idle(shared = [timer0, i2c0], local = [cutter])]
     fn idle(mut cx: idle::Context) -> ! {
+        // Capture cutter here to avoid borrow problems within the lock() closure
+        let cutter = cx.local.cutter;
         (&mut cx.shared.timer0, &mut cx.shared.i2c0).lock(|timer, i2c| {
             // Display greeting
             lcd1602::display_greeting(timer, i2c);
             timer.delay_ms(GREETING_DUR_IN_MS);
 
+            // Input Loop
+            let mut cut_length;
+            let mut num_cuts;
             loop {
                 // Prompt user for Cut Length
                 rprintln!("Prompting user for Cut Length...");
-                let cut_length = get_user_parameter("CUT LENGTH (in):\n-> ", timer, i2c);
+                cut_length = get_user_parameter("CUT LENGTH (in):\n-> ", timer, i2c);
                 rprintln!("User accepted Cut Length of {}", cut_length);
 
                 // Prompt user for Number of Cuts
                 rprintln!("Prompting user for Number of Cuts...");
-                let num_cuts = get_user_parameter("NUMBER OF CUTS:\n-> ", timer, i2c);
+                num_cuts = get_user_parameter("NUMBER OF CUTS:\n-> ", timer, i2c);
                 rprintln!("User accepted Number of Cuts of {}", num_cuts);
 
                 // Present final confirmation
@@ -157,11 +162,31 @@ mod app {
                 } else {
                     // User accepted confirmation, break out of input loop
                     rprintln!("User accepted confirmation");
-                    lcd1602::clear_display(timer, i2c);
-                    lcd1602::write_string("Input accepted!\nCutting...", timer, i2c);
                     break;
                 }
             }
+
+            // Cutting Loop
+            lcd1602::clear_display(timer, i2c);
+            lcd1602::write_string("Cutting...\n00000 / ", timer, i2c);
+            lcd1602::write_u32(num_cuts, timer, i2c);
+            lcd1602::shift_cursor(lcd1602::Direction::Left, 8, timer, i2c);
+            for i in 1..=num_cuts {
+                // Update LCD
+                lcd1602::backspace(5, timer, i2c);
+                lcd1602::write_u32(i, timer, i2c);
+
+                // Perform a single cut
+                cutter.set_duty(12.0);
+                timer.delay_ms(CUT_CYCLE_TIME_MS);
+                cutter.set_duty(3.0);
+
+                // Allow time for wire feed
+                timer.delay_ms(WIRE_FEED_TIME_MS);
+            }
+
+            lcd1602::clear_display(timer, i2c);
+            lcd1602::write_string("Finished Cutting\nWoohoo! <3", timer, i2c);
         });
 
         rprintln!("Entering Idle loop");

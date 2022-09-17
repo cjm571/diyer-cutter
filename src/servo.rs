@@ -15,13 +15,9 @@ Copyright (C) 2022 CJ McAllister
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 use core::fmt::Debug;
-use microbit::{
-    hal::{
-        gpio::{Output, Pin, PushPull},
-        pwm::{self, Pwm},
-        time::U32Ext,
-    },
-    pac::pwm0,
+use microbit::hal::{
+    gpio::{Output, Pin, PushPull},
+    pwm,
 };
 
 
@@ -42,8 +38,8 @@ const DECODER_CMP_VALUE_MASK: u16 = 0x7FFF;
 
 pub struct Servo<T: pwm::Instance> {
     pwm_inst: T,
-    channel: pwm::Channel,
-    output_pin: Pin<Output<PushPull>>,
+    _channel: pwm::Channel,
+    _output_pin: Pin<Output<PushPull>>,
     common_duty: [u16; 2],
 }
 
@@ -92,15 +88,18 @@ impl<T: pwm::Instance> Servo<T> {
 
         Self {
             pwm_inst,
-            channel,
-            output_pin,
+            _channel: channel,
+            _output_pin: output_pin,
             common_duty,
         }
     }
 
     pub fn set_duty(&mut self, duty: f32) {
         // Set the new duty cycle
-        self.common_duty = [((FIFTY_HZ_IN_500KHZ_TICKS as f32 / 100.0) * duty) as u16 | 1 << 15, 0];
+        self.common_duty = [
+            ((FIFTY_HZ_IN_500KHZ_TICKS as f32 / 100.0) * duty) as u16 | 1 << 15,
+            0,
+        ];
         self.pwm_inst
             .seq0
             .ptr
@@ -128,21 +127,44 @@ impl<T: pwm::Instance> Debug for Servo<T> {
         let psel = self.pwm_inst.psel.out[0].read().bits();
 
         // UNSAFELY retrieve seq values
-        let seq0_val = unsafe { *(seq0_ptr as *const i32)};
-        let seq1_val = unsafe { *(seq1_ptr as *const i32)};
+        let seq0_val = unsafe { *(seq0_ptr as *const i32) };
+        let seq1_val = unsafe { *(seq1_ptr as *const i32) };
 
         f.write_fmt(format_args!("Servo Register Map:\n"))?;
         f.write_fmt(format_args!("  SHORTS:         {:0>8b}\n", shorts))?;
         f.write_fmt(format_args!("  ENABLE:         {:0>8b}\n", enable))?;
         f.write_fmt(format_args!("  MODE:           {:0>8b}\n", mode))?;
-        f.write_fmt(format_args!("  COUNTERTOP:     {:0>8b} ({})\n", countertop, countertop))?;
-        f.write_fmt(format_args!("  PRESCALER:      {:0>8b} ({})\n", prescaler, prescaler))?;
+        f.write_fmt(format_args!(
+            "  COUNTERTOP:     {:0>8b} ({})\n",
+            countertop, countertop
+        ))?;
+        f.write_fmt(format_args!(
+            "  PRESCALER:      {:0>8b} ({})\n",
+            prescaler, prescaler
+        ))?;
         f.write_fmt(format_args!("  DECODER:        {:0>8b}\n", decoder))?;
-        f.write_fmt(format_args!("  LOOP:           {:0>8b} ({})\n", loop_, loop_))?;
-        f.write_fmt(format_args!("  SEQ[0]PTR, CNT: {:0>8x}, {:0>8b} ({})\n", seq0_ptr, seq0_cnt, seq0_cnt))?;
-        f.write_fmt(format_args!("  SEQ[0] Value:   {:0>16b} ({})\n", seq0_val, seq0_val & DECODER_CMP_VALUE_MASK as i32))?;
-        f.write_fmt(format_args!("  SEQ[1]PTR, CNT: {:0>8x}, {:0>8b} ({})\n", seq1_ptr, seq1_cnt, seq1_cnt))?;
-        f.write_fmt(format_args!("  SEQ[1] Value:   {:0>16b} ({})\n", seq1_val, seq1_val & DECODER_CMP_VALUE_MASK as i32))?;
+        f.write_fmt(format_args!(
+            "  LOOP:           {:0>8b} ({})\n",
+            loop_, loop_
+        ))?;
+        f.write_fmt(format_args!(
+            "  SEQ[0]PTR, CNT: {:0>8x}, {:0>8b} ({})\n",
+            seq0_ptr, seq0_cnt, seq0_cnt
+        ))?;
+        f.write_fmt(format_args!(
+            "  SEQ[0] Value:   {:0>16b} ({})\n",
+            seq0_val,
+            seq0_val & DECODER_CMP_VALUE_MASK as i32
+        ))?;
+        f.write_fmt(format_args!(
+            "  SEQ[1]PTR, CNT: {:0>8x}, {:0>8b} ({})\n",
+            seq1_ptr, seq1_cnt, seq1_cnt
+        ))?;
+        f.write_fmt(format_args!(
+            "  SEQ[1] Value:   {:0>16b} ({})\n",
+            seq1_val,
+            seq1_val & DECODER_CMP_VALUE_MASK as i32
+        ))?;
         f.write_fmt(format_args!("  PSEL.OUT[0]:    {:0>8b}\n", psel))?;
 
         Ok(())
