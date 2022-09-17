@@ -38,6 +38,9 @@ use crate::i2c::{
     lcd1602,
 };
 
+mod servo;
+use servo::{Servo};
+
 
 #[app(device = microbit::pac, peripherals = true)]
 mod app {
@@ -110,6 +113,14 @@ mod app {
 
         rprintln!("Initializing 3x4 Matrix Keypad...");
         keypad::init(&mut i2c0);
+
+        rprintln!("Initializing Cutter Servo...");
+        let pwm_output_pin = board.pins.p0_09.into_push_pull_output(Level::Low).degrade();
+        let mut cutter = Servo::new(board.PWM0, microbit::hal::pwm::Channel::C0, pwm_output_pin);
+
+        //FIXME: DEBUG DELETE
+        cutter.set_duty(90.0);
+        rprintln!("{:?}", cutter);
 
         (
             Shared { timer0, i2c0 },
