@@ -60,8 +60,8 @@ const T_CYCE_IN_US: u32 = 500;
 ///////////////////////////////////////////////////////////////////////////////
 
 #[allow(dead_code)]
-#[derive(PartialEq)]
-enum Direction {
+#[derive(PartialEq, Eq)]
+pub enum Direction {
     Left,
     Right,
 }
@@ -180,13 +180,13 @@ pub fn backspace<T: timer::Instance, U: twim::Instance>(
 ) {
     for _i in 0..count {
         // Shift cursor backwards
-        shift_cursor(Direction::Left, timer, i2c);
+        shift_cursor(Direction::Left, 1, timer, i2c);
 
         // Write a blank character code
         write_char(32 as char, timer, i2c);
 
         // Shift cursor backwards again in prep for next char entry
-        shift_cursor(Direction::Left, timer, i2c);
+        shift_cursor(Direction::Left, 1, timer, i2c);
     }
 }
 
@@ -304,23 +304,26 @@ fn write_char<T: timer::Instance, U: twim::Instance>(
     pulse_enable(timer, i2c);
 }
 
-fn shift_cursor<T: timer::Instance, U: twim::Instance>(
+pub fn shift_cursor<T: timer::Instance, U: twim::Instance>(
     dir: Direction,
+    num_spaces: usize,
     timer: &mut Timer<T>,
     i2c: &mut Twim<U>,
 ) {
-    // Higher-order data bits write
-    reset_pins(i2c);
-    gpio_set_rmw(I2C_ADDR_LCD, MASK_D4, i2c);
-    pulse_enable(timer, i2c);
+    for _ in 0..num_spaces {
+        // Higher-order data bits write
+        reset_pins(i2c);
+        gpio_set_rmw(I2C_ADDR_LCD, MASK_D4, i2c);
+        pulse_enable(timer, i2c);
 
-    // Lower-order data bits write
-    reset_pins(i2c);
-    // Left == low, Right == high
-    if dir == Direction::Right {
-        gpio_set_rmw(I2C_ADDR_LCD, MASK_D6, i2c);
+        // Lower-order data bits write
+        reset_pins(i2c);
+        // Left == low, Right == high
+        if dir == Direction::Right {
+            gpio_set_rmw(I2C_ADDR_LCD, MASK_D6, i2c);
+        }
+        pulse_enable(timer, i2c);
     }
-    pulse_enable(timer, i2c);
 }
 
 fn newline<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &mut Twim<U>) {
