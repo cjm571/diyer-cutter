@@ -27,10 +27,6 @@ use microbit::{
     },
     pac::{TIMER0, TIMER1},
 };
-use panic_rtt_target as _;
-use rtt_target::{rprintln, rtt_init_print};
-
-use rtic::app;
 
 mod i2c;
 use crate::i2c::{
