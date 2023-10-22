@@ -14,7 +14,6 @@ Copyright (C) 2022 CJ McAllister
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 use microbit::hal::{prelude::*, timer, twim, Timer, Twim};
-use rtt_target::rprintln;
 
 use super::*;
 
@@ -85,22 +84,22 @@ pub fn init<T: timer::Instance, U: twim::Instance>(timer: &mut Timer<T>, i2c: &m
     register_value_set(I2C_ADDR_LCD, MCP23008Register::IODIR, 0b00000000, i2c);
 
     // 1. Allow time for LCD VCC to rise to 4.5V
-    rprintln!("Giving LCD time to initialize...");
+    defmt::println!("Giving LCD time to initialize...");
     timer.delay_ms(T_RCC_IN_MS);
 
     // 2, 3. Set up LCD for 4-bit operation, 2-line Mode
-    rprintln!("Setting LCD up for 4bit Operation, 2-Line Mode...");
+    defmt::println!("Setting LCD up for 4bit Operation, 2-Line Mode...");
     set_4bit_2line_mode(timer, i2c);
 
     // 4. Turn on display/cursor
-    rprintln!("Turning on LCD Display and Cursor...");
+    defmt::println!("Turning on LCD Display and Cursor...");
     set_cursor(timer, i2c);
 
     // 5. Entry mode set
-    rprintln!("Setting entry mode to INCR, no SHIFT...");
+    defmt::println!("Setting entry mode to INCR, no SHIFT...");
     set_autoincrement(timer, i2c);
 
-    rprintln!("LCD Initialization Complete");
+    defmt::println!("LCD Initialization Complete");
 }
 
 pub fn display_greeting<T: timer::Instance, U: twim::Instance>(
@@ -109,7 +108,7 @@ pub fn display_greeting<T: timer::Instance, U: twim::Instance>(
 ) {
     // Write "HI BABE!"
     write_string("HI BABE! <3\nYou so pretty...", timer, i2c);
-    rprintln!("Writing greeting...");
+    defmt::println!("Writing greeting...");
 }
 
 pub fn write_u32<T: timer::Instance, U: twim::Instance>(

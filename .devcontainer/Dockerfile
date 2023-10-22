@@ -12,6 +12,3 @@ COPY Cargo.toml /workspaces/diyer-cutter/Cargo.toml
 
 # Add appropriate toolchain for micro:bit development
 RUN rustup target add thumbv7em-none-eabihf
-
-# Install cargo dependencies
-RUN cargo install flip-link probe-run
