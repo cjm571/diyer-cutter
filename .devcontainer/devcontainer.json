@@ -1,0 +1,28 @@
+{
+	"name": "DIYer-Cutter",
+	"build": {
+        // Path is relative to the devcontainer.json file.
+        "dockerfile": "Dockerfile" 
+    },
+
+	// Use 'mounts' to make the cargo cache persistent in a Docker Volume.
+	"mounts": [
+		{
+			"source": "devcontainer-cargo-cache-${devcontainerId}",
+			"target": "/usr/local/cargo",
+			"type": "volume"
+		}
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"bungcip.better-toml",
+				"ms-vscode.hexeditor",
+				"wayou.vscode-todo-highlight"
+			]
+		}
+	},
+
+	"runArgs": ["--privileged"]
+}
