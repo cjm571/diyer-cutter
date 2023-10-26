@@ -19,9 +19,16 @@ Copyright (C) 2023 CJ McAllister
 
 use core::cell::RefCell;
 
-use cortex_m::{peripheral::NVIC, interrupt::{self as cortex_interrupt, Mutex}};
+use cortex_m::{
+    interrupt::{self as cortex_interrupt, Mutex},
+    peripheral::NVIC,
+};
 
-use microbit::{Board, hal::{gpio::Level, prelude::*, timer, Timer, Twim, twim}, pac::{Interrupt, interrupt, TIMER1, TIMER0, PWM0, TWIM0}};
+use microbit::{
+    hal::{gpio::Level, prelude::*, timer, twim, Timer, Twim},
+    pac::{interrupt, Interrupt, PWM0, TIMER0, TIMER1, TWIM0},
+    Board,
+};
 
 mod i2c;
 use crate::i2c::{
@@ -31,7 +38,6 @@ use crate::i2c::{
 
 mod servo;
 use servo::Servo;
-
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Named Constants
@@ -46,9 +52,8 @@ const MAX_INPUT_CHARS: usize = 5;
 const CUT_CYCLE_TIME_MS: u32 = 1500;
 const WIRE_FEED_TIME_MS: u32 = 3000;
 
-
 ///////////////////////////////////////////////////////////////////////////////
-//  Shared Peripheral Handles 
+//  Shared Peripheral Handles
 ///////////////////////////////////////////////////////////////////////////////
 
 static TIMER0_HANDLE: Mutex<RefCell<Option<Timer<TIMER0>>>> = Mutex::new(RefCell::new(None));
@@ -65,7 +70,7 @@ fn main() -> ! {
     defmt::println!("Hello, world!");
 
     init();
-    
+
     defmt::println!("Initialization Complete!");
 
     idle();
@@ -85,7 +90,7 @@ fn init() {
     // Initialize a 1-second timer
     let timer1 = init_1s_timer(board.TIMER1);
     cortex_interrupt::free(|cs| TIMER1_HANDLE.borrow(cs).replace(Some(timer1)));
-    
+
     // Initialize the TWIM0 (I2C) controller
     let mut i2c0 = i2c::init(
         board.TWIM0,
@@ -119,7 +124,6 @@ fn init() {
     cortex_interrupt::free(|cs| I2C0_HANDLE.borrow(cs).replace(Some(i2c0)));
     cortex_interrupt::free(|cs| CUTTER_HANDLE.borrow(cs).replace(Some(cutter)));
 }
-
 
 fn idle() -> ! {
     cortex_interrupt::free(|cs| {
@@ -307,7 +311,6 @@ fn final_confirmation<T: timer::Instance, U: twim::Instance>(
     }
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 //  Interrupt Handlers
 ///////////////////////////////////////////////////////////////////////////////
@@ -318,12 +321,13 @@ fn TIMER1() {
     cortex_interrupt::free(|cs| {
         let mut local_timer1_handle_ref = TIMER1_HANDLE.borrow(cs).borrow_mut();
         let local_timer1_handle = local_timer1_handle_ref.as_mut().unwrap();
-        local_timer1_handle.event_compare_cc0().write(|w| w.events_compare().not_generated());
+        local_timer1_handle
+            .event_compare_cc0()
+            .write(|w| w.events_compare().not_generated());
 
         local_timer1_handle.start(ONE_SECOND_IN_MHZ);
     });
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Embedded Boilerplate
