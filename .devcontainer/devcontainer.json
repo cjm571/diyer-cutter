@@ -24,8 +24,5 @@
 		}
 	},
 
-	// Cargo install apparently doesn't work via Dockerfile RUN command, so need to do it via a post-create step
-	"postCreateCommand": ".devcontainer/postCreate.sh",
-
 	"runArgs": ["--privileged"]
 }
