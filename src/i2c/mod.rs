@@ -37,7 +37,6 @@ pub mod lcd1602;
 
 pub const I2C_ADDR_LCD: u8 = 0b0100000;
 pub const I2C_ADDR_KEYPAD: u8 = 0b0100001;
-pub const I2C_ADDR_STEPPER: u8 = 0b0100010;
 
 const GPIO_REG_ADDR: u8 = MCP23008Register::GPIO as u8;
 

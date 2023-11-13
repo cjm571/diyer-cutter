@@ -25,7 +25,7 @@ use cortex_m::{
 };
 
 use microbit::{
-    hal::{gpio::{Level, Pin, Output, PushPull}, prelude::*, timer, twim, Timer, Twim},
+    hal::{gpio::Level, prelude::*, timer, twim, Timer, Twim},
     pac::{interrupt, Interrupt, PWM0, TIMER0, TIMER1, TWIM0},
     Board,
 };
@@ -38,6 +38,10 @@ use crate::i2c::{
 
 mod servo;
 use servo::Servo;
+
+mod stepper;
+use stepper::Stepper;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //  Named Constants
@@ -60,10 +64,7 @@ static TIMER0_HANDLE: Mutex<RefCell<Option<Timer<TIMER0>>>> = Mutex::new(RefCell
 static TIMER1_HANDLE: Mutex<RefCell<Option<Timer<TIMER1>>>> = Mutex::new(RefCell::new(None));
 static I2C0_HANDLE: Mutex<RefCell<Option<Twim<TWIM0>>>> = Mutex::new(RefCell::new(None));
 static CUTTER_HANDLE: Mutex<RefCell<Option<Servo<PWM0>>>> = Mutex::new(RefCell::new(None));
-
-// TEST START: Capture pin for STEP control
-static STEP_PIN_HANDLE: Mutex<RefCell<Option<Pin<Output<PushPull>>>>> = Mutex::new(RefCell::new(None));
-// TEST END
+static STEPPER_HANDLE: Mutex<RefCell<Option<Stepper>>> = Mutex::new(RefCell::new(None));
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -124,15 +125,16 @@ fn init() {
     let pwm_output_pin = board.pins.p0_09.into_push_pull_output(Level::Low).degrade();
     let cutter = Servo::new(board.PWM0, microbit::hal::pwm::Channel::C0, pwm_output_pin);
 
+    defmt::println!("Initializing Stepper Motor...");
+    let step_pin = board.pins.p0_03.into_push_pull_output(Level::Low).degrade();
+    let dir_pin = board.pins.p0_04.into_push_pull_output(Level::Low).degrade();
+    let stepper = Stepper::new(step_pin, dir_pin);
+
     // Store the peripheral handles in RefCells, so interrupts and main thread can use them
     cortex_interrupt::free(|cs| TIMER0_HANDLE.borrow(cs).replace(Some(timer0)));
     cortex_interrupt::free(|cs| I2C0_HANDLE.borrow(cs).replace(Some(i2c0)));
     cortex_interrupt::free(|cs| CUTTER_HANDLE.borrow(cs).replace(Some(cutter)));
-
-    // TEST START: Capture pin for STEP control
-    let step_pin = board.pins.p0_03.into_push_pull_output(Level::Low).degrade();
-    cortex_interrupt::free(|cs| STEP_PIN_HANDLE.borrow(cs).replace(Some(step_pin)));
-    // TEST END
+    cortex_interrupt::free(|cs| STEPPER_HANDLE.borrow(cs).replace(Some(stepper)));
 }
 
 fn idle() -> ! {
@@ -144,25 +146,12 @@ fn idle() -> ! {
         let i2c0 = local_i2c0_handle_ref.as_mut().unwrap();
         let mut local_cutter_handle_ref = CUTTER_HANDLE.borrow(cs).borrow_mut();
         let cutter = local_cutter_handle_ref.as_mut().unwrap();
+        let mut local_stepper_handle_ref = STEPPER_HANDLE.borrow(cs).borrow_mut();
+        let stepper = local_stepper_handle_ref.as_mut().unwrap();
 
         // Display greeting
         lcd1602::display_greeting(timer0, i2c0);
         timer0.delay_ms(GREETING_DUR_IN_MS);
-
-        // TEST START: Set up and slowly spin stepper motor
-        const STEP_CYCLE_TIME: u32 = 1;
-        let mut local_step_pin_handle_ref = STEP_PIN_HANDLE.borrow(cs).borrow_mut();
-        let step_pin = local_step_pin_handle_ref.as_mut().unwrap();
-
-        loop {
-            // Step
-            step_pin.set_high().unwrap();
-            timer0.delay_ms(STEP_CYCLE_TIME);
-            step_pin.set_low().unwrap();
-            timer0.delay_ms(STEP_CYCLE_TIME);
-        }
-        // TEST END
-
 
         // Input Loop
         let mut cut_length;
@@ -201,13 +190,19 @@ fn idle() -> ! {
             lcd1602::backspace(5, timer0, i2c0);
             lcd1602::write_u32(i, timer0, i2c0);
 
+            // Step 10000 times to feed wire
+            stepper.step_forward(10000, timer0);
+
+            // Allow time for stepper to settle
+            timer0.delay_ms(250_u32);
+
             // Perform a single cut
             cutter.set_duty(12.0);
             timer0.delay_ms(CUT_CYCLE_TIME_MS);
             cutter.set_duty(3.0);
-
-            // Allow time for wire feed
-            timer0.delay_ms(WIRE_FEED_TIME_MS);
+            
+            // Allow time for stepper to settle
+            timer0.delay_ms(750_u32);
         }
 
         lcd1602::clear_display(timer0, i2c0);
